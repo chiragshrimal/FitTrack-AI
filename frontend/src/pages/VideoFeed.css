@@ -1,0 +1,146 @@
+.video-feed {
+    min-height: calc(100vh - 64px);
+    padding: 2rem;
+    background-color: var(--background-color);
+    display: flex;
+    gap: 2rem;
+  }
+  
+  .video-container {
+    flex: 1;
+    background-color: var(--white);
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .exercise-selector {
+    margin-bottom: 1.5rem;
+  }
+  
+  .exercise-selector label {
+    margin-right: 1rem;
+  }
+  
+  .exercise-selector select {
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+  }
+
+  .exercise-select{
+    padding: 0.5rem;
+    width: 100px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+  }
+  
+  .webcam-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 1.5rem;
+  }
+  
+  .webcam {
+    width: 100%;
+    border-radius: 8px;
+  }
+  
+  .feedback-overlay {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 1rem;
+    border-radius: 4px;
+    color: white;
+  }
+  
+  .feedback-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .form-feedback {
+    font-size: 1.1rem;
+  }
+  
+  .confidence-meter {
+    height: 8px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  
+  .confidence-bar {
+    height: 100%;
+    background-color: var(--primary-color);
+    transition: width 0.3s ease;
+  }
+  
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+  
+  .btn-start,
+  .btn-stop {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-start {
+    background-color: var(--primary-color);
+    color: white;
+  }
+  
+  .btn-stop {
+    background-color: var(--error-color);
+    color: white;
+  }
+  
+  .stats-panel {
+    width: 300px;
+    background-color: var(--white);
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .stat-item {
+    margin-bottom: 1.5rem;
+  }
+  
+  .stat-item h3 {
+    color: var(--secondary-color);
+    margin-bottom: 0.5rem;
+  }
+  
+  .stat-item p {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+  }
+  
+  @media (max-width: 1024px) {
+    .video-feed {
+      flex-direction: column;
+    }
+  
+    .stats-panel {
+      width: 100%;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .video-feed {
+      padding: 1rem;
+    }
+  }
