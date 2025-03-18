@@ -1,173 +1,110 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import './SignUp.css';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import "./SignUp.css";
 
-const SIGNUP_URL='/register';
+// const SIGNUP_URL = "http://192.168.133.164:5000/api/trainer/register"; // Change to your backend URL
 
 const SignUp = () => {
   const [formData, setFormData] = useState({
-    username: '',
-    name: '',
-    email: '',
-    password: '',
-    age: '',
-    weight: '',
-    height: '',
-    userType: 'trainee',
-    gender: 'male'
+    username: "",
+    name: "",
+    email: "",
+    password: "",
+    age: "",
+    weight: "",
+    height: "",
+    userType: "trainee",
+    gender: "male",
   });
 
-  const [errors, setErrors] = useState({
-    username: '',
-    name: '',
-    email: '',
-    password: '',
-    age: '',
-    weight: '',
-    height: ''
-  });
-  
-  const [formError, setFormError] = useState('');
+  const [SIGNUP_URL, setSIGNUP_URL] = useState("http://192.168.133.164:5000/api/trainee/register");
+
+  useEffect(() => {
+    if (formData.userType === "trainer") {
+      setSIGNUP_URL("http://192.168.133.164:5000/api/trainer/register");
+    }
+  }, [formData.userType]);
+
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState("");
   const [isFormValid, setIsFormValid] = useState(false);
-  
   const navigate = useNavigate();
 
-  // Validate form whenever formData or errors change
   useEffect(() => {
-    const isValid = Object.values(errors).every(error => error === '') && 
-                   Object.entries(formData).every(([key, value]) => 
-                     key === 'userType' || key === 'gender' || value !== '');
+    const isValid =
+      Object.values(errors).every((error) => !error) &&
+      Object.values(formData).every((value) => value !== "");
     setIsFormValid(isValid);
   }, [formData, errors]);
 
   const validateField = (name, value) => {
-    let errorMessage = '';
-    
+    let errorMessage = "";
     switch (name) {
-      case 'username':
-        if (value.length < 3) {
-          errorMessage = 'Username must be at least 3 characters';
-        } else if (!/^[a-zA-Z0-9_]+$/.test(value)) {
-          errorMessage = 'Username can only contain letters, numbers and underscores';
-        }
+      case "username":
+        if (value.length < 3) errorMessage = "Username must be at least 3 characters";
         break;
-        
-      case 'name':
-        if (value.length < 2) {
-          errorMessage = 'Name must be at least 2 characters';
-        } else if (!/^[a-zA-Z\s]+$/.test(value)) {
-          errorMessage = 'Name can only contain letters and spaces';
-        }
+      case "name":
+        if (!/^[a-zA-Z\s]+$/.test(value)) errorMessage = "Only letters and spaces allowed";
         break;
-        
-      case 'email':
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {  
-          errorMessage = 'Please enter a valid email address';
-        }
+      case "email":
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) errorMessage = "Invalid email format";
         break;
-        
-      case 'password':
-        if (value.length < 8) {
-          errorMessage = 'Password must be at least 8 characters';
-        } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(value)) {
-          errorMessage = 'Password must contain at least one uppercase letter, one lowercase letter, and one number';
-        }
+      case "password":
+        if (value.length < 8) errorMessage = "Password must be at least 8 characters";
         break;
-        
-      case 'age':
-        if (value < 13) {
-          errorMessage = 'You must be at least 13 years old';
-        } else if (value > 120) {
-          errorMessage = 'Please enter a valid age';
-        }
+      case "age":
+        if (value < 13 || value > 120) errorMessage = "Invalid age";
         break;
-        
-      case 'weight':
-        if (value <= 0) {
-          errorMessage = 'Weight must be greater than 0';
-        } else if (value > 500) {
-          errorMessage = 'Please enter a valid weight';
-        }
+      case "weight":
+      case "height":
+        if (value <= 0) errorMessage = "Must be greater than 0";
         break;
-        
-      case 'height':
-        if (value <= 0) {
-          errorMessage = 'Height must be greater than 0';
-        } else if (value > 300) {
-          errorMessage = 'Please enter a valid height';
-        }
-        break;
-        
       default:
         break;
     }
-    
     return errorMessage;
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-    
-    // Validate the field and update error state
-    const error = validateField(name, value);
-    setErrors({
-      ...errors,
-      [name]: error
-    });
+    setFormData({ ...formData, [name]: value });
+    setErrors({ ...errors, [name]: validateField(name, value) });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Final validation before submission
+
     const newErrors = {};
     let hasErrors = false;
-    
-    // Validate all fields
+
     Object.entries(formData).forEach(([name, value]) => {
-      if (name !== 'userType' && name !== 'gender') {
-        const error = validateField(name, value);
-        newErrors[name] = error;
-        if (error) hasErrors = true;
-      }
+      const error = validateField(name, value);
+      newErrors[name] = error;
+      if (error) hasErrors = true;
     });
-    
     setErrors(newErrors);
-    
+
     if (hasErrors) {
-      setFormError('Please correct the errors in the form');
+      setFormError("Please correct the errors before submitting");
       return;
     }
-    
-    // Clear any form errors
-    setFormError('');
-    
-    // Make an API call to Sign Up
+
+    setFormError("");
     try {
-      const response=await axios.post(SIGNUP_URL, JSON.stringify(formData), {
-        headers: {'Content-Type': 'application/json'},
-        withCredentials:true
+      const response = await axios.post(SIGNUP_URL, formData, {
+        headers: { "Content-Type": "application/json" },
+        withCredentials: true,
       });
       console.log(response.data);
-      console.log(response.accessToken);
-      console.log(JSON.stringify(response));
+      navigate("/login");
     } catch (error) {
-      if(error.response && error.response.status === 409) {
-        setFormError('Username already exists.');
+      if (error.response?.status === 409) {
+        setFormError("Email already exists");
       } else {
-        setFormError('Sign Up failed. Please try again later.');
+        setFormError("Sign Up failed. Try again later");
       }
-      console.error('Sign Up failed:', error);
-      setFormError('Sign Up failed. Please try again later.');
-      return;
-    }    
-    navigate('/login');
+    }
   };
 
   return (
@@ -175,7 +112,7 @@ const SignUp = () => {
       <div className="auth-card">
         <h2>Sign Up</h2>
         {formError && <div className="error">{formError}</div>}
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="username">Username</label>
             <input
@@ -184,11 +121,12 @@ const SignUp = () => {
               name="username"
               value={formData.username}
               onChange={handleChange}
-              className={errors.username ? 'error-input' : ''}
+              className={errors.username ? "error-input" : ""}
               required
             />
             {errors.username && <div className="input-error">{errors.username}</div>}
           </div>
+
           <div className="form-group">
             <label htmlFor="name">Name</label>
             <input
@@ -197,11 +135,12 @@ const SignUp = () => {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              className={errors.name ? 'error-input' : ''}
+              className={errors.name ? "error-input" : ""}
               required
             />
             {errors.name && <div className="input-error">{errors.name}</div>}
           </div>
+
           <div className="form-group">
             <label htmlFor="email">Email</label>
             <input
@@ -210,11 +149,12 @@ const SignUp = () => {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              className={errors.email ? 'error-input' : ''}
+              className={errors.email ? "error-input" : ""}
               required
             />
             {errors.email && <div className="input-error">{errors.email}</div>}
           </div>
+
           <div className="form-group">
             <label htmlFor="password">Password</label>
             <input
@@ -223,11 +163,12 @@ const SignUp = () => {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className={errors.password ? 'error-input' : ''}
+              className={errors.password ? "error-input" : ""}
               required
             />
             {errors.password && <div className="input-error">{errors.password}</div>}
           </div>
+
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="age">Age</label>
@@ -237,11 +178,12 @@ const SignUp = () => {
                 name="age"
                 value={formData.age}
                 onChange={handleChange}
-                className={errors.age ? 'error-input' : ''}
+                className={errors.age ? "error-input" : ""}
                 required
               />
               {errors.age && <div className="input-error">{errors.age}</div>}
             </div>
+
             <div className="form-group">
               <label htmlFor="weight">Weight (kg)</label>
               <input
@@ -250,11 +192,12 @@ const SignUp = () => {
                 name="weight"
                 value={formData.weight}
                 onChange={handleChange}
-                className={errors.weight ? 'error-input' : ''}
+                className={errors.weight ? "error-input" : ""}
                 required
               />
               {errors.weight && <div className="input-error">{errors.weight}</div>}
             </div>
+
             <div className="form-group">
               <label htmlFor="height">Height (cm)</label>
               <input
@@ -263,12 +206,22 @@ const SignUp = () => {
                 name="height"
                 value={formData.height}
                 onChange={handleChange}
-                className={errors.height ? 'error-input' : ''}
+                className={errors.height ? "error-input" : ""}
                 required
               />
               {errors.height && <div className="input-error">{errors.height}</div>}
             </div>
           </div>
+
+          <div className="form-group">
+            <label htmlFor="gender">Gender</label>
+            <select id="gender" name="gender" value={formData.gender} onChange={handleChange}>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
           <div className="form-group">
             <label htmlFor="userType">User Type</label>
             <select
@@ -281,24 +234,8 @@ const SignUp = () => {
               <option value="trainer">Trainer</option>
             </select>
           </div>
-          <div className="form-group">
-            <label htmlFor="gender">Gender</label>
-            <select
-              id="gender"
-              name="gender"
-              value={formData.gender}
-              onChange={handleChange}
-            >
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <button 
-            type="submit" 
-            className="btn-primary"
-            disabled={!isFormValid}
-          >
+
+          <button type="submit" className="btn-primary" disabled={!isFormValid}>
             Sign Up
           </button>
         </form>
@@ -307,4 +244,4 @@ const SignUp = () => {
   );
 };
 
-export default SignUp; 
+export default SignUp;
