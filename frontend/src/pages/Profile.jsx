@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Search, UserPlus, UserMinus, Check, X } from 'lucide-react';
+import useAuth from '../hooks/useAuth';
 import './Profile.css';
 
 const Profile = () => {
-  const user = useSelector((state) => state.auth.user);
-  const userType = useSelector((state) => state.auth.userType);
-  
+  const { auth } = useAuth();
+  const user = auth?.data;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [trainerRequests, setTrainerRequests] = useState([
@@ -16,8 +17,6 @@ const Profile = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    // Here you would make an API call to search for trainees
-    // For now, we'll simulate results
     if (searchQuery.trim()) {
       setSearchResults([
         { id: 1, username: searchQuery, name: 'Test User' }
@@ -26,7 +25,6 @@ const Profile = () => {
   };
 
   const handleSendRequest = (traineeId) => {
-    // Here you would make an API call to send the request
     console.log('Sending request to trainee:', traineeId);
     setSearchResults([]);
     setSearchQuery('');
@@ -49,38 +47,27 @@ const Profile = () => {
       </div>
 
       <div className="profile-content">
-        <div className="profile-section">
+        <div className="profile-section personal-info">
           <h2>Personal Information</h2>
           <div className="info-grid">
-            <div className="info-item">
-              <label>Username</label>
-              <p>{user?.username || 'N/A'}</p>
-            </div>
-            <div className="info-item">
-              <label>User Type</label>
-              <p>{userType || 'N/A'}</p>
-            </div>
-            <div className="info-item">
-              <label>Email</label>
-              <p>{user?.email || 'N/A'}</p>
-            </div>
-            <div className="info-item">
-              <label>Age</label>
-              <p>{user?.age || 'N/A'}</p>
-            </div>
-            <div className="info-item">
-              <label>Weight</label>
-              <p>{user?.weight ? `${user.weight} kg` : 'N/A'}</p>
-            </div>
-            <div className="info-item">
-              <label>Height</label>
-              <p>{user?.height ? `${user.height} cm` : 'N/A'}</p>
-            </div>
+            {[
+              { label: 'Username', value: user?.name || 'N/A' },
+              { label: 'User Type', value: user?.userType || 'N/A' },
+              { label: 'Email', value: user?.email || 'N/A' },
+              { label: 'Age', value: user?.age || 'N/A' },
+              { label: 'Weight', value: user?.weight ? `${user.weight} kg` : 'N/A' },
+              { label: 'Height', value: user?.height ? `${user.height} cm` : 'N/A' }
+            ].map((info, index) => (
+              <div key={index} className="info-card">
+                <label>{info.label}</label>
+                <p>{info.value}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        {userType === 'trainer' && (
-          <div className="profile-section">
+        {user?.userType === 'trainer' && (
+          <div className="profile-section search-trainees">
             <h2>Search Trainees</h2>
             <form onSubmit={handleSearch} className="search-form">
               <div className="search-input">
@@ -98,7 +85,7 @@ const Profile = () => {
             {searchResults.length > 0 && (
               <div className="search-results">
                 {searchResults.map(trainee => (
-                  <div key={trainee.id} className="search-result-item">
+                  <div key={trainee.id} className="search-result-card">
                     <div className="trainee-info">
                       <p className="trainee-name">{trainee.name}</p>
                       <p className="trainee-username">@{trainee.username}</p>
@@ -117,12 +104,12 @@ const Profile = () => {
           </div>
         )}
 
-        {userType === 'trainee' && (
-          <div className="profile-section">
+        {user?.userType === 'trainee' && (
+          <div className="profile-section trainer-requests">
             <h2>Trainer Requests & Connections</h2>
             <div className="requests-list">
               {trainerRequests.map(request => (
-                <div key={request.id} className="request-item">
+                <div key={request.id} className="request-card">
                   <p>Trainer: {request.trainerName}</p>
                   {request.status === 'pending' && (
                     <div className="request-actions">
@@ -162,12 +149,6 @@ const Profile = () => {
             </div>
           </div>
         )}
-
-        <div className="profile-section">
-          <h2>Account Settings</h2>
-          <button className="btn-primary">Change Password</button>
-          <button className="btn-primary">Edit Profile</button>
-        </div>
       </div>
     </div>
   );

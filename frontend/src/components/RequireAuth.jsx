@@ -1,17 +1,17 @@
-// import { useLocation, Navigate, Outlet } from "react-router-dom";
-// import useAuth from "../hooks/useAuth";
+import { useLocation, Navigate, Outlet } from "react-router-dom";
+import useAuth from "../hooks/useAuth";
 
-// const RequireAuth = ({ allowedRoles }) => {
-//     const { auth } = useAuth();
-//     const location = useLocation();
+const RequireAuth = ({ allowedUsers }) => {
+    const { auth } = useAuth();
+    const location = useLocation();
 
-//     return (
-//         auth?.roles?.find(role => allowedRoles?.includes(role))
-//             ? <Outlet />
-//             : auth?.user
-//                 ? <Navigate to="/unauthorized" state={{ from: location }} replace />
-//                 : <Navigate to="/login" state={{ from: location }} replace />
-//     );
-// }
+    return (
+        auth?.data?.userType && allowedUsers.includes(auth?.data?.userType)
+            ? <Outlet />
+            : auth?.data?.userType 
+                ? <Navigate to="/access-denied" replace />
+                : <Navigate to="/login" state={{ from: location }} replace />
+    );
+}
 
-// export default RequireAuth;
+export default RequireAuth;

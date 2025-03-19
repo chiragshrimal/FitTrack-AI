@@ -6,10 +6,15 @@
 
 .profile-header {
   margin-bottom: 2rem;
+  padding: 2rem;
+  color: rgb(0, 0, 0);
+  text-align: center;
+  border-radius: 8px;
 }
 
 .profile-header h1 {
-  color: var(--secondary-color);
+  margin: 0;
+  font-size: 2.5rem;
 }
 
 .profile-content {
@@ -36,23 +41,25 @@
   gap: 1.5rem;
 }
 
-.info-item {
-  margin-bottom: 1rem;
+.info-card {
+  background-color: var(--background-color);
+  padding: 1.5rem;
+  border-radius: 8px;
+  text-align: center;
 }
 
-.info-item label {
+.info-card label {
   display: block;
   color: var(--text-color);
   font-weight: 500;
   margin-bottom: 0.5rem;
 }
 
-.info-item p {
+.info-card p {
   color: var(--secondary-color);
   font-size: 1.1rem;
 }
 
-/* Search functionality styles */
 .search-form {
   margin-bottom: 1.5rem;
 }
@@ -92,13 +99,13 @@
   margin-top: 1rem;
 }
 
-.search-result-item {
+.search-result-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
   background-color: var(--background-color);
-  border-radius: 4px;
+  border-radius: 8px;
   margin-bottom: 0.5rem;
 }
 
@@ -136,16 +143,15 @@
   transform: translateY(-1px);
 }
 
-/* Requests and connections styles */
 .requests-list {
   display: grid;
   gap: 1rem;
 }
 
-.request-item {
+.request-card {
   background-color: var(--background-color);
-  padding: 1rem;
-  border-radius: 4px;
+  padding: 1.5rem;
+  border-radius: 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -189,13 +195,6 @@
   font-weight: 500;
 }
 
-.profile-section button.btn-primary {
-  margin-right: 1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 @media (max-width: 768px) {
   .profile-container {
     padding: 1rem;
@@ -213,7 +212,7 @@
     flex-direction: column;
   }
 
-  .request-item {
+  .request-card {
     flex-direction: column;
     gap: 1rem;
     text-align: center;
@@ -222,13 +221,6 @@
   .request-actions,
   .connection-actions {
     width: 100%;
-    justify-content: center;
-  }
-
-  .profile-section button.btn-primary {
-    width: 100%;
-    margin-right: 0;
-    margin-bottom: 1rem;
     justify-content: center;
   }
 }

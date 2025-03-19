@@ -3,10 +3,14 @@ import { Link } from 'react-router-dom';
 import { Activity, Award, BarChart2, Users } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import Footer from '../components/Footer';
+import useAuth from '../hooks/useAuth';
 import './Home.css';
 
 const Home = () => {
-  const { isAuthenticated, userType, user } = useSelector((state) => state.auth);
+  // const { isAuthenticated, userType } = useSelector((state) => state.auth);
+  
+  const { auth } = useAuth();
+  const isAuthenticated = !!auth?.data;
 
   return (
     <div className="home">
@@ -33,7 +37,7 @@ const Home = () => {
       </div>
 
       <div className="features-section">
-        <h2>Key Features</h2>
+        <h2>Services</h2>
         <div className="features-grid">
           <div className="feature-card">
             <Award size={48} className="feature-icon" />

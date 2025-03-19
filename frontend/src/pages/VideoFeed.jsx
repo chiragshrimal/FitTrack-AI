@@ -1,8 +1,16 @@
 import React, { useRef, useState } from 'react';
+import {Navigate} from 'react-router-dom';
+import useAuth from '../hooks/useAuth';
 import Webcam from 'react-webcam';
 import './VideoFeed.css';
 
 const VideoFeed = () => {
+
+  const {auth} = useAuth();
+  if(auth?.data?.userType !== 'trainee') {
+    return <Navigate to="/access-denied" replace />;
+  }
+
   const webcamRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
   const [currentExercise, setCurrentExercise] = useState('pushup');

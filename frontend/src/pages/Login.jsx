@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useContext } from "react";
-import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import { setUser } from "../store/slices/authSlice";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import useAuth from "../hooks/useAuth";
+import axiosInstance from "../api/axios";
 import "./SignUp.css";
-import AuthContext from "../context/AuthProvider";
-import axios from "axios";
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -13,18 +11,19 @@ const Login = () => {
     userType: "trainee",
   });
 
-  const [LOGIN_URL, setLOGIN_URL] = useState("http://192.168.133.164:5000/api/trainee/login");
+  const [LOGIN_URL, setLOGIN_URL] = useState("/api/trainee/login");
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [isFormValid, setIsFormValid] = useState(false);
 
-  const { setAuth } = useContext(AuthContext);
-  const dispatch = useDispatch();
+  const { setAuth } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from.pathname || "/";
 
   useEffect(() => {
     if (formData.userType === "trainer") {
-      setLOGIN_URL("http://192.168.133.164:5000/api/trainer/login");
+      setLOGIN_URL("/api/trainer/login");
     }
   }, [formData.userType]);
 
@@ -76,20 +75,13 @@ const Login = () => {
 
     setFormError("");
     try {
-      const response = await axios.post(LOGIN_URL, formData, {
+      const response = await axiosInstance.post(LOGIN_URL, formData, {
         headers: { "Content-Type": "application/json" },
         withCredentials: true,
       });
-      console.log(response.data);
-      console.log(response.data.token);
 
-      setAuth({
-        email: formData.email,
-        userType: formData.userType,
-      });
-
-      dispatch(setUser({ email: formData.email, userType: formData.userType }));
-      navigate("/");
+      setAuth(response.data);
+      navigate(from, {replace:true});
     } catch (error) {
       if (error.response?.status === 401) {
         setFormError("Invalid email or password");

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { useNavigate, useLocation } from "react-router-dom";
+import axiosInstance from "../api/axios";
+import useAuth from "../hooks/useAuth";
 import "./SignUp.css";
-
-// const SIGNUP_URL = "http://192.168.133.164:5000/api/trainer/register"; // Change to your backend URL
 
 const SignUp = () => {
   const [formData, setFormData] = useState({
@@ -18,18 +17,22 @@ const SignUp = () => {
     gender: "male",
   });
 
-  const [SIGNUP_URL, setSIGNUP_URL] = useState("http://192.168.133.164:5000/api/trainee/register");
+  const [SIGNUP_URL, setSIGNUP_URL] = useState("/api/trainee/register");
+  const { setAuth } = useAuth();
 
   useEffect(() => {
     if (formData.userType === "trainer") {
-      setSIGNUP_URL("http://192.168.133.164:5000/api/trainer/register");
+      setSIGNUP_URL("/api/trainer/register");
     }
   }, [formData.userType]);
 
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [isFormValid, setIsFormValid] = useState(false);
+
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from.pathname || "/";
 
   useEffect(() => {
     const isValid =
@@ -92,12 +95,13 @@ const SignUp = () => {
 
     setFormError("");
     try {
-      const response = await axios.post(SIGNUP_URL, formData, {
+      const response = await axiosInstance.post(SIGNUP_URL, formData, {
         headers: { "Content-Type": "application/json" },
         withCredentials: true,
       });
-      console.log(response.data);
-      navigate("/login");
+      console.log(response.data.data.username);
+      setAuth(response.data);
+      navigate(from, {replace:true});
     } catch (error) {
       if (error.response?.status === 409) {
         setFormError("Email already exists");
