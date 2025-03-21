@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import axiosInstance from "../api/axios";
+import axios from "../api/axios";
 import useAuth from "../hooks/useAuth";
 import "./SignUp.css";
 
@@ -18,13 +18,17 @@ const SignUp = () => {
   });
 
   const [SIGNUP_URL, setSIGNUP_URL] = useState("/api/trainee/register");
-  const { setAuth } = useAuth();
+  const { auth, setAuth } = useAuth();
 
   useEffect(() => {
     if (formData.userType === "trainer") {
       setSIGNUP_URL("/api/trainer/register");
     }
   }, [formData.userType]);
+
+  // useEffect(() => {
+  //   console.log("Updated Auth:", auth);
+  // }, [auth]);
 
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
@@ -45,16 +49,20 @@ const SignUp = () => {
     let errorMessage = "";
     switch (name) {
       case "username":
-        if (value.length < 3) errorMessage = "Username must be at least 3 characters";
+        if (value.length < 3)
+          errorMessage = "Username must be at least 3 characters";
         break;
       case "name":
-        if (!/^[a-zA-Z\s]+$/.test(value)) errorMessage = "Only letters and spaces allowed";
+        if (!/^[a-zA-Z\s]+$/.test(value))
+          errorMessage = "Only letters and spaces allowed";
         break;
       case "email":
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) errorMessage = "Invalid email format";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+          errorMessage = "Invalid email format";
         break;
       case "password":
-        if (value.length < 8) errorMessage = "Password must be at least 8 characters";
+        if (value.length < 8)
+          errorMessage = "Password must be at least 8 characters";
         break;
       case "age":
         if (value < 13 || value > 120) errorMessage = "Invalid age";
@@ -95,16 +103,24 @@ const SignUp = () => {
 
     setFormError("");
     try {
-      const response = await axiosInstance.post(SIGNUP_URL, formData, {
+      const response = await axios.post(SIGNUP_URL, formData, {
         headers: { "Content-Type": "application/json" },
         withCredentials: true,
       });
-      console.log(response.data.data.username);
-      setAuth(response.data);
-      navigate(from, {replace:true});
+
+      // console.log("Respose:", response?.data);
+
+      setAuth((prevAuth) => ({
+        ...prevAuth,
+        ...response?.data,
+      }));
+
+      navigate(from, { replace: true });
     } catch (error) {
       if (error.response?.status === 409) {
         setFormError("Email already exists");
+      } else if (error.response?.status === 410) {
+        setFormError("Username already exists");
       } else {
         setFormError("Sign Up failed. Try again later");
       }
@@ -128,7 +144,9 @@ const SignUp = () => {
               className={errors.username ? "error-input" : ""}
               required
             />
-            {errors.username && <div className="input-error">{errors.username}</div>}
+            {errors.username && (
+              <div className="input-error">{errors.username}</div>
+            )}
           </div>
 
           <div className="form-group">
@@ -170,7 +188,9 @@ const SignUp = () => {
               className={errors.password ? "error-input" : ""}
               required
             />
-            {errors.password && <div className="input-error">{errors.password}</div>}
+            {errors.password && (
+              <div className="input-error">{errors.password}</div>
+            )}
           </div>
 
           <div className="form-row">
@@ -199,7 +219,9 @@ const SignUp = () => {
                 className={errors.weight ? "error-input" : ""}
                 required
               />
-              {errors.weight && <div className="input-error">{errors.weight}</div>}
+              {errors.weight && (
+                <div className="input-error">{errors.weight}</div>
+              )}
             </div>
 
             <div className="form-group">
@@ -213,13 +235,20 @@ const SignUp = () => {
                 className={errors.height ? "error-input" : ""}
                 required
               />
-              {errors.height && <div className="input-error">{errors.height}</div>}
+              {errors.height && (
+                <div className="input-error">{errors.height}</div>
+              )}
             </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="gender">Gender</label>
-            <select id="gender" name="gender" value={formData.gender} onChange={handleChange}>
+            <select
+              id="gender"
+              name="gender"
+              value={formData.gender}
+              onChange={handleChange}
+            >
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>

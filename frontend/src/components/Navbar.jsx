@@ -1,32 +1,30 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-// import { useSelector, useDispatch } from 'react-redux';
 import { Activity, User, LogOut, Menu } from 'lucide-react';
-import { logout } from '../store/slices/authSlice';
+import useLogout from '../hooks/useLogout';
 import useAuth from '../hooks/useAuth';
 
 import './Navbar.css';
 
 const Navbar = () => {
 
+  const logout=useLogout();
+  const {auth}=useAuth()
 
   const [isDropDownOpen, setIsDropDownOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { auth, setAuth } = useAuth();
 
-  const userType=auth?.data?.userType;
-  const name=auth?.data?.name;
-  const isAuthenticated=!!auth?.data;
+  const userType=auth?.user?.userType;
+  const name=auth?.user?.name;
+  const isAuthenticated=!!auth?.user;
 
   const toggleDropdown = () => setIsDropDownOpen(!isDropDownOpen);
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
 
-  // const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    setAuth(null);
-    // dispatch(logout());
+  const handleLogout =() => {
+    logout();
     navigate('/');
   };
 

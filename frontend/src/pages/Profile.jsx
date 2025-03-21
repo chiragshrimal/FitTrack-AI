@@ -1,12 +1,22 @@
 import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
 import { Search, UserPlus, UserMinus, Check, X } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import './Profile.css';
 
 const Profile = () => {
   const { auth } = useAuth();
-  const user = auth?.data;
+
+  const userInfo = {
+    name: auth?.user?.name,
+    userType: auth?.user?.userType,
+    email: auth?.user?.email,
+    age: auth?.user?.age,
+    weight: auth?.user?.weight,
+    height: auth?.user?.height,
+    gender: auth?.user?.gender
+  }
+
+  
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -51,12 +61,12 @@ const Profile = () => {
           <h2>Personal Information</h2>
           <div className="info-grid">
             {[
-              { label: 'Username', value: user?.name || 'N/A' },
-              { label: 'User Type', value: user?.userType || 'N/A' },
-              { label: 'Email', value: user?.email || 'N/A' },
-              { label: 'Age', value: user?.age || 'N/A' },
-              { label: 'Weight', value: user?.weight ? `${user.weight} kg` : 'N/A' },
-              { label: 'Height', value: user?.height ? `${user.height} cm` : 'N/A' }
+              { label: 'Username', value : userInfo.name || 'N/A' },
+              { label: 'User Type', value: userInfo.userType || 'N/A' },
+              { label: 'Email', value: userInfo.email || 'N/A' },
+              { label: 'Age', value: userInfo.age || 'N/A' },
+              { label: 'Weight', value: userInfo.weight ? `${userInfo.weight} kg` : 'N/A' },
+              { label: 'Height', value: userInfo.height ? `${userInfo.height} cm` : 'N/A' }
             ].map((info, index) => (
               <div key={index} className="info-card">
                 <label>{info.label}</label>
@@ -66,7 +76,7 @@ const Profile = () => {
           </div>
         </div>
 
-        {user?.userType === 'trainer' && (
+        {userInfo?.userType === 'trainer' && (
           <div className="profile-section search-trainees">
             <h2>Search Trainees</h2>
             <form onSubmit={handleSearch} className="search-form">
@@ -104,7 +114,7 @@ const Profile = () => {
           </div>
         )}
 
-        {user?.userType === 'trainee' && (
+        {userInfo?.userType === 'trainee' && (
           <div className="profile-section trainer-requests">
             <h2>Trainer Requests & Connections</h2>
             <div className="requests-list">

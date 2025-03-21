@@ -1,17 +1,22 @@
 import { Router } from "express";
-import {
-  getLoggedInTrainerDetails,
-  loginTrainer,
-  logoutTrainer,
-  registerTrainer
+import { 
+  loginTrainer, 
+  logoutTrainer, 
+  registerTrainer, 
+  refreshAccessToken, 
+  getLoggedInTrainerDetails, 
 } from "../controllers/trainer.controller.js";
-import { isLoggedIn } from "../middlewares/auth.middleware.js";
+import verifyJWT from "../middlewares/authTrainer.middleware.js";
+
 
 const router = Router();
 
-router.post("/register",registerTrainer);
-router.post("/login", loginTrainer);
-router.post("/logout", logoutTrainer);
-router.get("/profile", isLoggedIn, getLoggedInTrainerDetails);
+router.route("/register").post(registerTrainer);
 
-export default router;
+router.route("/login").post(loginTrainer)
+//secured routes
+router.route("/logout").post(verifyJWT,  logoutTrainer)
+router.route("/refresh-token").post(refreshAccessToken)
+router.route("/profile").get(verifyJWT, getLoggedInTrainerDetails)
+
+export default router

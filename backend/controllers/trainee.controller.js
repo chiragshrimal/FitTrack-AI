@@ -1,12 +1,7 @@
-// import crypto from 'crypto';
-// import fs from 'fs/promises';
-
-// import cloudinary from 'cloudinary';
-
 import asyncHandler from '../middlewares/asyncHandler.middleware.js';
-import AppError from '../utils/AppError.js';
+import AppError from '../utils/appError.js';
 import User from '../models/trainee.model.js';
-// import sendEmail from '../utils/sendEmail.js';
+import {ApiError} from '../utils/ApiError.js';
 
 const cookieOptions = {
   secure: process.env.NODE_ENV === 'production' ? true : false,
@@ -14,12 +9,33 @@ const cookieOptions = {
   httpOnly: true,
 };
 
+// generate the Access token and Refresh token 
+
+const generateAccessAndRefereshTokens = async(userId) =>{
+  try {
+      const user = await User.findById(userId)
+      const accessToken = await user.generateAccessToken()
+      const refreshToken = await user.generateRefreshToken()
+      // console.log(refreshToken);
+      // console.log(accessToken);
+
+      user.refreshToken = refreshToken
+      await user.save({ validateBeforeSave: false })
+
+      return {accessToken, refreshToken}
+
+
+  } catch (error) {
+      throw new ApiError(500, "Something went wrong while generating referesh and access token")
+  }
+}
+
 /**
  * @REGISTER
- * @ROUTE @POST {{URL}}/api/v1/user/register
+ * @ROUTE @POST 
  * @ACCESS Public
  */
-export const registerTrainee = asyncHandler(async (req, res, next) => {
+const registerTrainee = asyncHandler(async (req, res, next) => {
   // Destructuring the necessary data from req object
   const {username, name,email, password,age, height, weight,gender} = req.body;
 
@@ -28,11 +44,18 @@ export const registerTrainee = asyncHandler(async (req, res, next) => {
     return next(new AppError('All fields are required', 400));
   }
 
+  try {
+    const userNameExists = await User.findOne({ username});
+
+  if(userNameExists){
+    return next(new AppError("Username already exists",410));
+  }
+
   // Check if the user exists with the provided email
-  const userExists = await User.findOne({ email ,username});
+  const emailExists = await User.findOne({ email});
 
   // If user exists send the reponse
-  if (userExists) {
+  if (emailExists) {
     return next(new AppError('Email already exists', 409));
   }
 
@@ -51,35 +74,46 @@ export const registerTrainee = asyncHandler(async (req, res, next) => {
   // If user not created send message response
   if (!user) {
     return next(
-      new AppError('Trainee registration failed, please try again later', 400)
+      new AppError('Trainee registration failed, please try again later', 402)
     );
   }
   // Save the user object
-  await user.save();
+  // await user.save();
 
-  // Generating a JWT token
-  const token = await user.generateJWTToken();
+  const {accessToken, refreshToken} = await generateAccessAndRefereshTokens(user._id)
 
-  // Setting the password to undefined so it does not get sent in the response
-  user.password = undefined;
+  // console.log(accessToken);
+  // console.log(refreshToken);
 
-  // Setting the token in the cookie with name token along with cookieOptions
-  res.cookie('token', token, cookieOptions);
+  // const loggedIn = await User.findById(user._id).select("-refreshToken")
+  user.password=undefined;
 
-  // If all good send the response to the frontend
-  res.status(201).json({
-    success: true,
-    message: 'Trainee registered successfully',
-    data : user,
-  });
+  const options = {
+      httpOnly: true,
+      secure: true
+  }
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json({
+      success : true,
+      message : "Trainee register successfuly",
+      user,accessToken,refreshToken
+    })
+  } catch (error) {
+    return next(new AppError(error.message ,500));
+  }
+
 });
 
 /**
  * @LOGIN
- * @ROUTE @POST {{URL}}/api/v1/user/login
+ * @ROUTE @POST 
  * @ACCESS Public
  */
-export const loginTrainee = asyncHandler(async (req, res, next) => {
+const loginTrainee = asyncHandler(async (req, res, next) => {
   // Destructuring the necessary data from req object
   const { email, password } = req.body;
 
@@ -88,67 +122,158 @@ export const loginTrainee = asyncHandler(async (req, res, next) => {
     return next(new AppError('Email and Password are required', 400));
   }
 
-  // Finding the user with the sent email
-  const user = await User.findOne({ email }).select('+password');
+  try {
+    // Finding the user with the sent email
+  const user = await User.findOne({email}).select("+password");
 
   // If no user or sent password do not match then send generic response
   if (!(user && (await user.comparePassword(password)))) {
     return next(
-      new AppError('Email or Password do not match or trainee does not exist', 401)
+      new AppError('Email or Password does not match', 401)
     );
   }
 
-  // Generating a JWT token
-  const token = await user.generateJWTToken();
+  const {accessToken, refreshToken} = await generateAccessAndRefereshTokens(user.id)
 
-  // Setting the password to undefined so it does not get sent in the response
-  user.password = undefined;
+  // const  = await User.findById(user.id).select("-refreshToken")
+  user.password=undefined;
 
-  // Setting the token in the cookie with name token along with cookieOptions
-  res.cookie('token', token, cookieOptions);
+  const options = {
+      httpOnly: true,
+      secure: true
+  }
 
-  // If all good send the response to the frontend
-  res.status(200).json({
-    success: true,
-    message: 'Trainee logged in successfully',
-    data : user,
-  });
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json({
+      success : true,
+      message : "Trainee loggedIn successfuly",
+      user,accessToken,refreshToken
+    })
+  } catch (error) {
+    return next(new AppError(error.message , 500));
+  }
 });
+
+// refresh token se Access token ko renew krate hai 
+const refreshAccessToken = asyncHandler(async (req, res) => {
+
+  // frontend se refresh token aayega 
+  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+  if (!incomingRefreshToken) {
+      throw new ApiError(411, "unauthorized request")
+  }
+
+  try {
+      const decodedToken = jwt.verify(
+          incomingRefreshToken,
+          process.env.REFRESH_TOKEN_SECRET
+      )
+  
+      const user = await User.findById(decodedToken?._id)
+  
+      if (!user) {
+          throw new ApiError(411, "Invalid refresh token")
+      }
+  
+      if (incomingRefreshToken !== user?.refreshToken) {
+          throw new ApiError(411, "Refresh token is expired or used")
+          
+      }
+  
+      const options = {
+          httpOnly: true,
+          secure: true
+      }
+  
+      const {accessToken, newRefreshToken} = await generateAccessAndRefereshTokens(user._id)
+  
+      return res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", newRefreshToken, options).json({
+        success: true,
+        message : "Access token refreshed",
+        accessToken,refreshToken: newRefreshToken
+      })
+  } catch (error) {
+      throw new ApiError(411, error?.message || "Invalid refresh token")
+  }
+
+})
+
 
 /**
  * @LOGOUT
- * @ROUTE @POST {{URL}}/api/v1/user/logout
+ * @ROUTE @POST
  * @ACCESS Public
  */
-export const logoutTrainee = asyncHandler(async (_req, res, _next) => {
-  // Setting the cookie value to null
-  res.cookie('token', null, {
-    secure: process.env.NODE_ENV === 'production' ? true : false,
-    maxAge: 0,
-    httpOnly: true,
-  });
+const logoutTrainee = asyncHandler(async(req, res) => {
 
-  // Sending the response
-  res.status(200).json({
+  try {
+    await User.findByIdAndUpdate(
+      req.user._id,
+      {
+          $unset: {
+              refreshToken: 1 // this removes the field from document
+          }
+      },
+      {
+          new: true
+      }
+  )
+
+  const options = {
+      httpOnly: true,
+      secure: true
+  }
+
+  return res
+  .status(200)
+  .clearCookie("accessToken", options)
+  .clearCookie("refreshToken", options)
+  .json({
     success: true,
-    message: 'Trainee logged out successfully',
-  });
+    message : "Trainee logout successfully"
+  })
+
+  } catch (error) {
+    
+    next(new AppError(error.message , 500));
+  }
 });
 
 /**
  * @LOGGED_IN_USER_DETAILS
- * @ROUTE @GET {{URL}}/api/v1/user/me
+ * @ROUTE @GET
  * @ACCESS Private(Logged in users only)
  */
-export const getLoggedInTraineeDetails = asyncHandler(async (req, res, _next) => {
+const getLoggedInTraineeDetails = asyncHandler(async (req, res, _next) => {
   // Finding the user using the id from modified req object
-  const user = await User.findById(req.user.id);
 
-  res.status(200).json({
+  try {
+    const user = await User.findById(req.user.id).select("-refreshToken");
+
+  return res
+  .status(200)
+  .json({
     success: true,
-    message: 'Trainee details',
-    data : user,
-  });
+    message : "Trainee details fetched successfully",
+    user
+  })
+  } catch (error) {
+    
+    next(new AppError(error.message, 500));
+  }
+  
 });
 
-export default {registerTrainee, loginTrainee, logoutTrainee, getLoggedInTraineeDetails};
+export {loginTrainee, 
+  logoutTrainee, 
+  registerTrainee, 
+  refreshAccessToken, 
+  getLoggedInTraineeDetails,
+};

@@ -1,14 +1,22 @@
 import { Router } from "express";
-import {
-  registerTrainee, loginTrainee, logoutTrainee, getLoggedInTraineeDetails
+import { 
+  loginTrainee, 
+  logoutTrainee, 
+  registerTrainee, 
+  refreshAccessToken, 
+  getLoggedInTraineeDetails, 
 } from "../controllers/trainee.controller.js";
-import { isLoggedIn } from "../middlewares/auth.middleware.js";
+import verifyJWT from "../middlewares/authTrainee.middleware.js";
 
-const router = Router();
 
-router.post("/register",registerTrainee);
-router.post("/login", loginTrainee);
-router.post("/logout",isLoggedIn, logoutTrainee);
-router.get("/profile", isLoggedIn, getLoggedInTraineeDetails);
+const router = Router()
 
-export default router;
+router.route("/register").post(registerTrainee);
+
+router.route("/login").post(loginTrainee)
+//secured routes
+router.route("/logout").post(verifyJWT,  logoutTrainee)
+router.route("/refresh-token").post(refreshAccessToken)
+router.route("/profile").get(verifyJWT, getLoggedInTraineeDetails)
+
+export default router

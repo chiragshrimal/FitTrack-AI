@@ -1,5 +1,5 @@
 import asyncHandler from '../middlewares/asyncHandler.middleware.js';
-import AppError from '../utils/AppError.js';
+import AppError from '../utils/appError.js';
 import User from '../models/trainee.model.js';
 import Request from '../models/request.model.js';
 import Trainer from '../models/trainer.model.js'; // Assuming there's a Trainer model

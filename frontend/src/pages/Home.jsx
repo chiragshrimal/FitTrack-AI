@@ -1,16 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Award, BarChart2, Users } from 'lucide-react';
-import { useSelector, useDispatch } from 'react-redux';
 import Footer from '../components/Footer';
 import useAuth from '../hooks/useAuth';
 import './Home.css';
 
 const Home = () => {
-  // const { isAuthenticated, userType } = useSelector((state) => state.auth);
   
   const { auth } = useAuth();
-  const isAuthenticated = !!auth?.data;
+  const isAuthenticated = !!auth?.user;  
+
+  // console.log(auth);
 
   return (
     <div className="home">
@@ -49,11 +49,6 @@ const Home = () => {
             <h3>Progress Tracking</h3>
             <p>Monitor your fitness journey with detailed analytics and progress charts.</p>
           </div>
-          {/* <div className="feature-card">
-            <Activity size={48} className="feature-icon" />
-            <h3>Personal AI Coach</h3>
-            <p>Receive personalized workout recommendations and form corrections.</p>
-          </div> */}
           <div className="feature-card">
             <Users size={48} className="feature-icon" />
             <h3>Expert Trainers</h3>

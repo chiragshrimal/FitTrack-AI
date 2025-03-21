@@ -8,33 +8,42 @@ const trainerSchema = new Schema(
   {
     username: {
       type: String,
-      required: [true, 'Trainer name  is required'],
+      required: [true, 'Username is required'],
       unique: true,
       trim: true,
     },
     name: {
       type: String,
       required: [true, 'Name is required'],
+      minlength: [3, 'Name must be at least 3 characters'],
       trim: true,
     },
     email: {
       type: String,
       required: [true, 'Email is required'],
       unique: true,
+      match: [
+          /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
+          'Please fill in a valid email address',
+        ],
     },
     password: {
       type: String,
       required: [true, 'Password is required'],
+      minlength: [8, 'Password must be at least 8 characters'],
       select: false,
     },
-    age: { type: String, required: true },
-    height: { type: Number, required: true },
-    weight: { type: Number, required:true },
+    age: { type: Number, required: true },
+    weight: { type: Number, required: true },
+    height: { type: Number, required: true }, // cm
     userType: {
       type: String,
       default: 'trainer',
     },
-    gender: { type: String, required: true }
+    refreshToken: {
+      type: String
+  },
+    gender: {type :String, required: true}
   },
   { timestamps: true }
 );
@@ -51,12 +60,31 @@ trainerSchema.methods = {
     return await bcrypt.compare(plainPassword, this.password);
   },
 
-  generateJWTToken: async function () {
-    return await jwt.sign({ id: this._id, role: this.role }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN,
-    });
+  generateAccessToken: function(){
+
+    return jwt.sign({
+      _id : this._id,
+      email: this.email,
+      username: this.username,
+    },
+    process.env.ACCESS_TOKEN_SECRET,
+    {
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRY
+    }
+  )
   },
+  
+  generateRefreshToken:  function(){
+    return  jwt.sign({
+      _id: this._id,
+    },
+    process.env.REFRESH_TOKEN_SECRET,
+    {
+      expiresIn: process.env.REFRESH_TOKEN_EXPIRY
+  }
+  )
+  }
 };
 
-const Trainer = model('Trainer', trainerSchema);
-export default Trainer;
+const User = model('Trainer', trainerSchema);
+export default User;

@@ -5,7 +5,7 @@ mongoose.set("strictQuery", false);
 const connectToDB = async () => {
   try {
     const { connection } = await mongoose.connect(
-      process.env.MONGO_URL
+      process.env.MONGO_URL || `mongodb://localhost:27017/fittrackAI`
     );
 
     if (connection) {

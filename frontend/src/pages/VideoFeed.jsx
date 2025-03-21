@@ -7,7 +7,7 @@ import './VideoFeed.css';
 const VideoFeed = () => {
 
   const {auth} = useAuth();
-  if(auth?.data?.userType !== 'trainee') {
+  if(auth?.user?.userType !== 'trainee') {
     return <Navigate to="/access-denied" replace />;
   }
 

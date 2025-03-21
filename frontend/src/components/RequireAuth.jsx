@@ -5,10 +5,13 @@ const RequireAuth = ({ allowedUsers }) => {
     const { auth } = useAuth();
     const location = useLocation();
 
+    // console.log(auth?.user?.userType);
+    
+
     return (
-        auth?.data?.userType && allowedUsers.includes(auth?.data?.userType)
+        auth?.user?.userType && allowedUsers.includes(auth?.user?.userType)
             ? <Outlet />
-            : auth?.data?.userType 
+            : auth?.user?.userType 
                 ? <Navigate to="/access-denied" replace />
                 : <Navigate to="/login" state={{ from: location }} replace />
     );

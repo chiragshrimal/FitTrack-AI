@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
-import axiosInstance from "../api/axios";
+import axios from "../api/axios";
 import "./SignUp.css";
 
 const Login = () => {
@@ -12,6 +12,14 @@ const Login = () => {
   });
 
   const [LOGIN_URL, setLOGIN_URL] = useState("/api/trainee/login");
+
+  useEffect(() => {
+    if (formData.userType === "trainer") {
+      setLOGIN_URL("/api/trainer/login");
+    }
+  }, [formData.userType]);
+
+
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [isFormValid, setIsFormValid] = useState(false);
@@ -20,12 +28,6 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from.pathname || "/";
-
-  useEffect(() => {
-    if (formData.userType === "trainer") {
-      setLOGIN_URL("/api/trainer/login");
-    }
-  }, [formData.userType]);
 
   useEffect(() => {
     const isValid =
@@ -75,7 +77,7 @@ const Login = () => {
 
     setFormError("");
     try {
-      const response = await axiosInstance.post(LOGIN_URL, formData, {
+      const response = await axios.post(LOGIN_URL, formData, {
         headers: { "Content-Type": "application/json" },
         withCredentials: true,
       });
@@ -85,9 +87,7 @@ const Login = () => {
     } catch (error) {
       if (error.response?.status === 401) {
         setFormError("Invalid email or password");
-      } else if (error.response?.status === 403) {
-        setFormError("Access denied. Please check your user type.");
-      } else {
+      }else {
         setFormError("Login failed. Please try again.");
       }
     }

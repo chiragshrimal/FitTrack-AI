@@ -96,6 +96,10 @@
     opacity: 0.6;
     font-size: 0.9rem;
   }
+
+  .logout-btn{
+    cursor: pointer;
+  }
   
   @media (max-width: 768px) {
     .footer {

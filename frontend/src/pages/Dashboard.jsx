@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from 'recharts';
+import useAuth from '../hooks/useAuth';
 import './Dashboard.css';
 
 const Dashboard = () => {
   const [selectedActivity, setSelectedActivity] = useState('pushup');
-  const userType = useSelector((state) => state.auth.userType);
-  
   // Placeholder data - would come from backend in production
+  const {auth} = useAuth();
+
   const activityStats = {
     pushup: { totalRecords: 25, totalReps: 500, avgReps: 20 },
     pullup: { totalRecords: 15, totalReps: 150, avgReps: 10 },
@@ -34,7 +34,7 @@ const Dashboard = () => {
     <div className="dashboard">
       <h1>Dashboard</h1>
       
-      {userType === 'trainer' && (
+      {auth?.user?.userType === 'trainer' && (
         <div className="trainee-selector">
           <h2>Select Trainee</h2>
           <select>
