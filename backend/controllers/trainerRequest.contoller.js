@@ -2,44 +2,55 @@ import asyncHandler from '../middlewares/asyncHandler.middleware.js';
 import AppError from '../utils/appError.js';
 import User from '../models/trainee.model.js';
 import Request from '../models/request.model.js';
-import Trainer from '../models/trainer.model.js'; // Assuming there's a Trainer model
+import Trainer from '../models/trainer.model.js';
 
 /**
  * @SEND_TRAINER_REQUEST
- * @ROUTE @POST /api/trainer/request
+ * @ROUTE @POST /api/trainer/send-request
  * @ACCESS Private (Trainer only)
  */
 export const sendTrainerRequest = asyncHandler(async (req, res, next) => {
   const trainerId = req.user.id; // Get trainer ID from auth middleware
-  
-  // Find users who do not have a trainer
-  const unassignedUsers = await User.find({ trainer: { $size: 0 } });
+  const { username } = req.body; // Get trainee's username from request body
 
-  if (unassignedUsers.length === 0) {
-    return next(new AppError('No available users to send requests.', 400));
+  if (!username) {
+    return next(new AppError('Trainee username is required.', 400));
+  }
+  try {
+    // Find the trainee by username
+  const trainee = await User.findOne({ username }).select("-refereshToken");
+  if (!trainee) {
+    return next(new AppError('Trainee not found.', 404));
   }
 
-  // Extract user IDs
-  const userIds = unassignedUsers.map(user => user._id);
+  // Check if the trainee already has the trainer
+  if (trainee.trainer.includes(trainerId)) {
+    return next(new AppError('You are already assigned as the trainer for this trainee.', 410));
+  }
 
-  // Check if a request already exists
-  const existingRequest = await Request.findOne({ from: trainerId });
+  // Check if a request already exists from this trainer to this trainee
+  const existingRequest = await Request.findOne({ from: trainerId, to: trainee._id });
   if (existingRequest) {
-    return next(new AppError('You have already sent requests to users.', 400));
+    return next(new AppError('You have already sent a request to this trainee.', 411));
   }
 
-  // Create a request
-  const request = await Request.create({ from: trainerId, to: userIds });
+  // Create a request for the specific trainee
+  const request = await Request.create({ from: trainerId, to: [trainee._id] });
 
   // Fetch trainer details
-  const trainer = await Trainer.findById(trainerId).select("-password"); // Exclude password field
+  const trainer = await Trainer.findById(trainerId); // Exclude password field
+
+  trainee.password=undefined;
 
   res.status(201).json({
     success: true,
-    message: 'Request sent to all unassigned users.',
-    trainer,
-    users: unassignedUsers, // Send the users data along with the response
+    message: `Request sent to ${username}.`,
+    trainee,
   });
+  } catch (error) {
+    return next(new AppError(error.message,500));
+  }
+  
 });
 
 export default { sendTrainerRequest };

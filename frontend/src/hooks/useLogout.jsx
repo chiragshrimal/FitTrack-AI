@@ -1,8 +1,10 @@
 import axios from "../api/axios";
+import useAxiosPrivate from "./useAxiosPrivate";
 import useAuth from "./useAuth";
 
 const useLogout = () => {
     const { auth, setAuth } = useAuth(); 
+    const axiosPrivate=useAxiosPrivate();
 
     const LOGOUT_URL = auth?.user?.userType === "trainer"
         ? "/api/trainer/logout"
@@ -13,7 +15,7 @@ const useLogout = () => {
 
     const logout = async () => {
         try {
-            await axios.post(
+            await axiosPrivate.post(
                 LOGOUT_URL, 
                 {}, 
                 { withCredentials: true}

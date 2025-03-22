@@ -258,7 +258,8 @@ const getLoggedInTrainerDetails = asyncHandler(async (req, res, _next) => {
   .status(200)
   .json({
     success: true,
-    message : "Trainer details fetched successfully"
+    message : "Trainer details fetched successfully",
+    user
   })
   } catch (error) {
     return next(new AppError(error.message,500));

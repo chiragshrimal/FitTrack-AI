@@ -83,6 +83,8 @@ const Login = () => {
       });
 
       setAuth(response.data);
+      console.log("Login response:", response.data);
+      
       navigate(from, {replace:true});
     } catch (error) {
       if (error.response?.status === 401) {

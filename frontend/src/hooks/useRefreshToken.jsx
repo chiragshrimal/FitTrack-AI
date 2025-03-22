@@ -4,13 +4,13 @@ import useAuth from './useAuth';
 const useRefreshToken = () => {
     const { auth, setAuth } = useAuth();
 
-    console.log("User Type:", auth?.user?.userType);
+    // console.log("User Type:", auth?.user?.userType);
 
     const REFRESH_TOKEN_URL = (auth?.user?.userType === "trainer")
         ? "/api/trainer/refresh-token"
         : "/api/trainee/refresh-token";
 
-    console.log("Refresh token URL:", REFRESH_TOKEN_URL);
+    // console.log("Refresh token URL:", REFRESH_TOKEN_URL);
     
 
     const refresh = async () => {
@@ -22,8 +22,8 @@ const useRefreshToken = () => {
             );
             console.log("Refresh token response:", response);
 
-            console.log("New access token:",response.data.accessToken);
-            console.log("New refresh token:",response.data.accessToken);
+            // console.log("New access token:",response.data.accessToken);
+            // console.log("New refresh token:",response.data.accessToken);
             
             setAuth(prev => ({                
                 ...prev,
