@@ -21,7 +21,7 @@ const useLogout = () => {
                 { withCredentials: true}
             );
             setAuth(null);
-            console.log("Logged out");
+            // console.log("Logged out");
         } catch (err) {
             console.error("Logout failed:",err);
         }

@@ -249,7 +249,7 @@ const logoutTrainer = asyncHandler(async(req, res) => {
  * @ROUTE @GET
  * @ACCESS Private(Logged in users only)
  */
-const getLoggedInTrainerDetails = asyncHandler(async (req, res, _next) => {
+const getLoggedInTrainerDetails = asyncHandler(async (req, res, next) => {
   // Finding the user using the id from modified req object
   try {
     const user = await User.findById(req.user.id).select("-password -refreshToken");

@@ -83,7 +83,7 @@ const Login = () => {
       });
 
       setAuth(response.data);
-      console.log("Login response:", response.data);
+      // console.log("Login response:", response.data);
       
       navigate(from, {replace:true});
     } catch (error) {

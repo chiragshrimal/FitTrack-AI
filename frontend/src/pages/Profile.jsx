@@ -19,6 +19,7 @@ const Profile = () => {
   });
 
   const [connectedTrainers, setConnectedTrainers] = useState([]);
+  const [connectedTrainees, setConnectedTrainees] = useState([]);
   const [trainerRequests, setTrainerRequests] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -34,7 +35,6 @@ const Profile = () => {
       try {
         const response = await axiosPrivate.get(USER_DETAILS_URL);
         setUserInfo(response.data.user);
-        // console.log("User Profile Response:", response.data);
       } catch (error) {
         console.error("Error fetching user details:", error);
       }
@@ -52,7 +52,6 @@ const Profile = () => {
             "/api/trainee/request/connected-trainers"
           );
           setConnectedTrainers(response.data.trainers || []);
-          console.log("Connected trainers:", response.data);
         } catch (error) {
           console.error("Error fetching connected trainers:", error);
         }
@@ -65,7 +64,6 @@ const Profile = () => {
             "/api/trainee/request/show-request"
           );
           setTrainerRequests(response.data.trainers || []);
-          console.log("Trainer requests:", response.data);
         } catch (error) {
           console.error("Error fetching trainer requests:", error);
         }
@@ -73,6 +71,22 @@ const Profile = () => {
 
       fetchConnectedTrainers();
       fetchTrainerRequests();
+    }
+
+    if (userInfo?.userType === "trainer") {
+      // Fetch connected trainees for trainers
+      const fetchConnectedTrainees = async () => {
+        try {
+          const response = await axiosPrivate.get(
+            "/api/trainer/request/connected-trainees"
+          );
+          setConnectedTrainees(response.data.trainees || []);
+        } catch (error) {
+          console.error("Error fetching connected trainees:", error);
+        }
+      };
+
+      fetchConnectedTrainees();
     }
   }, [userInfo?.userType, axiosPrivate]);
 
@@ -117,7 +131,7 @@ const Profile = () => {
       console.log("Request sent successfully");
       setSearchResults([]);
       setErrorMessage("Request sent successfully");
-      +setSearchQuery("");
+      setSearchQuery("");
     } catch (error) {
       console.error("Error sending request:", error);
       if (error.response) {
@@ -176,7 +190,7 @@ const Profile = () => {
 
   const handleRemoveTrainer = async (trainerUsername) => {
     try {
-      await axiosPrivate.post("/api/trainee/remove-trainer", {
+      await axiosPrivate.post("/api/trainee/request/remove-trainer", {
         username: trainerUsername,
       });
 
@@ -188,6 +202,23 @@ const Profile = () => {
       console.log("Trainer removed successfully");
     } catch (error) {
       console.error("Error removing trainer:", error);
+    }
+  };
+
+  const handleRemoveTrainee = async (traineeUsername) => {
+    try {
+      await axiosPrivate.post("/api/trainer/request/remove-trainee", {
+        username: traineeUsername,
+      });
+
+      // Update UI by removing trainee from connected list
+      setConnectedTrainees((prevTrainees) =>
+        prevTrainees.filter((trainee) => trainee.username !== traineeUsername)
+      );
+
+      console.log("Trainee removed successfully");
+    } catch (error) {
+      console.error("Error removing trainee:", error);
     }
   };
 
@@ -224,44 +255,73 @@ const Profile = () => {
         </div>
 
         {userInfo?.userType === "trainer" && (
-          <div className="profile-section search-trainees">
-            <h2>Search Trainees</h2>
-            <form onSubmit={handleSearch} className="search-form">
-              <div className="search-input">
-                <input
-                  type="text"
-                  placeholder="Search by username..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <button type="submit">
-                  <Search size={20} />
-                </button>
-              </div>
-            </form>
+          <>
+            {/* Search Trainees Section */}
+            <div className="profile-section search-trainees">
+              <h2>Search Trainees</h2>
+              <form onSubmit={handleSearch} className="search-form">
+                <div className="search-input">
+                  <input
+                    type="text"
+                    placeholder="Search by username..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <button type="submit">
+                    <Search size={20} />
+                  </button>
+                </div>
+              </form>
 
-            {errorMessage && <p className="no-results">{errorMessage}</p>}
+              {errorMessage && <p className="no-results">{errorMessage}</p>}
 
-            {Array.isArray(searchResults) && searchResults.length > 0 && (
-              <div className="search-results">
-                {searchResults.map((trainee, index) => (
-                  <div key={trainee.id || index} className="search-result-card">
-                    <div className="trainee-info">
-                      <p className="trainee-name">{trainee.name}</p>
-                      <p className="trainee-username">@{trainee.username}</p>
+              {Array.isArray(searchResults) && searchResults.length > 0 && (
+                <div className="search-results">
+                  {searchResults.map((trainee, index) => (
+                    <div key={trainee.id || index} className="search-result-card">
+                      <div className="trainee-info">
+                        <p className="trainee-name">{trainee.name}</p>
+                        <p className="trainee-username">@{trainee.username}</p>
+                      </div>
+                      <button
+                        onClick={() => handleSendRequest(trainee.username)}
+                        className="btn-send-request"
+                      >
+                        <UserPlus size={16} />
+                        Send Request
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleSendRequest(trainee.username)}
-                      className="btn-send-request"
-                    >
-                      <UserPlus size={16} />
-                      Send Request
-                    </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Connected Trainees Section */}
+            <div className="profile-section connected-trainees">
+              <h2>Connected Trainees</h2>
+              <div className="trainees-list">
+                {connectedTrainees.length === 0 ? (
+                  <p className="no-connections">No connected trainees</p>
+                ) : (
+                  connectedTrainees.map((trainee, index) => (
+                    <div key={trainee.id || index} className="trainee-card">
+                      <div className="trainee-info">
+                        <p className="trainee-name">{trainee.name}</p>
+                        <p className="trainee-username">@{trainee.username}</p>
+                      </div>
+                      <button
+                        className="btn-remove"
+                        onClick={() => handleRemoveTrainee(trainee.username)}
+                      >
+                        <UserMinus size={16} />
+                        Remove
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          </>
         )}
 
         {userInfo?.userType === "trainee" && (

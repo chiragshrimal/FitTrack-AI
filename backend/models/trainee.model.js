@@ -36,7 +36,7 @@ const userSchema = new Schema(
     age: { type: Number, required: true },
     weight: { type: Number, required: true },
     height: { type: Number, required: true }, // cm
-    trainer: [{ type: Schema.Types.ObjectId, ref: 'trainer' }],
+    trainer: [{ type: Schema.Types.ObjectId, ref: 'Trainer' }],
     userType: {
       type: String,
       default: 'trainee',

@@ -251,7 +251,7 @@ const logoutTrainee = asyncHandler(async(req, res) => {
  * @ROUTE @GET
  * @ACCESS Private(Logged in users only)
  */
-const getLoggedInTraineeDetails = asyncHandler(async (req, res, _next) => {
+const getLoggedInTraineeDetails = asyncHandler(async (req, res, next) => {
   // Finding the user using the id from modified req object
 
   try {
