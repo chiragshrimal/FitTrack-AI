@@ -15,7 +15,7 @@ router.post('/accept',verifyJWT, acceptTrainerRequest);
 
 router.get("/show-request",verifyJWT,showRequest);
 
-router.put("/remove-trainer",verifyJWT,removeTrainerFromTrainee);
+router.post("/remove-trainer",verifyJWT,removeTrainerFromTrainee);
 
 
 
