@@ -48,8 +48,11 @@ import trainerRequest from './routes/trainerRequest.route.js';
 import traineeRequestRoutes from './routes/traineeRequest.route.js';
 
 
+// app.use("api/trainee",traineeRequestRoutes);
 app.use('/api/trainee', traineeRoutes);
 app.use('/api/trainer', trainerRoutes);
+
+
 // Trainer Request Routes
 app.use('/api/trainer/request', trainerRequest);
 // User Request Routes

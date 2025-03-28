@@ -40,41 +40,47 @@ export const sendTrainerRequest = asyncHandler(async (req, res, next) => {
   if (!username) {
     return next(new AppError('Trainee username is required.', 400));
   }
+
   try {
     // Find the trainee by username
-  const trainee = await User.findOne({ username }).select("-refereshToken");
-  if (!trainee) {
-    return next(new AppError('Trainee not found.', 404));
-  }
+    const trainee = await User.findOne({ username }).select("-refereshToken");
+    if (!trainee) {
+      return next(new AppError('Trainee not found.', 404));
+    }
 
-  // Check if the trainee already has the trainer
-  if (trainee.trainer.includes(trainerId)) {
-    return next(new AppError('You are already assigned as the trainer for this trainee.', 410));
-  }
+    // Check if the trainee already has the trainer assigned
+    if (trainee.trainer.includes(trainerId)) {
+      return next(new AppError('You are already assigned as the trainer for this trainee.', 410));
+    }
 
-  // Check if a request already exists from this trainer to this trainee
-  const existingRequest = await Request.findOne({ from: trainerId, to: trainee._id });
-  if (existingRequest) {
-    return next(new AppError('You have already sent a request to this trainee.', 411));
-  }
+    // Check if a request already exists for this trainer
+    let request = await Request.findOne({ from: trainerId });
 
-  // Create a request for the specific trainee
-  const request = await Request.create({ from: trainerId, to: [trainee._id] });
+    if (request) {
+      // If the trainee is already in the request list, prevent duplicate entries
+      if (request.to.includes(trainee._id)) {
+        return next(new AppError('You have already sent a request to this trainee.', 411));
+      }
 
-  // Fetch trainer details
-  const trainer = await Trainer.findById(trainerId); // Exclude password field
+      // Add the new trainee to the existing request
+      request.to.push(trainee._id);
+      await request.save();
+    } else {
+      // Create a new request with this trainer and trainee
+      request = await Request.create({ from: trainerId, to: [trainee._id] });
+    }
 
-  trainee.password=undefined;
+    res.status(201).json({
+      success: true,
+      message: `Request sent to ${username}.`,
+      trainee,
+    });
 
-  res.status(201).json({
-    success: true,
-    message: `Request sent to ${username}.`,
-    trainee,
-  });
   } catch (error) {
-    return next(new AppError(error.message,500));
+    return next(new AppError(error.message, 500));
   }
-  
 });
+
+
 
 export default { sendTrainerRequest ,checkTrainee};
