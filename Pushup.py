@@ -189,3 +189,5 @@ class PushUpExerciseProcessor:
             "repCount": self.rep_count,
             # "angles": accuracy_data if isinstance(accuracy_data, dict) else {}
         }
+        
+
