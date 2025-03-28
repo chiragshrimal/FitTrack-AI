@@ -13,6 +13,7 @@ import PageNotFound from './pages/PageNotFound';
 import RequireAuth from './components/RequireAuth';
 import AccessDenied from './pages/AccessDenied';
 import PersistLogin from './components/PersistLogin';
+import { SocketProvider } from './context/SocketProvider';
 import './App.css';
 
 function App() {

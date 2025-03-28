@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Activity, User, LogOut, Menu } from 'lucide-react';
+import { useSocket } from '../context/SocketProvider';
 import useLogout from '../hooks/useLogout';
 import useAuth from '../hooks/useAuth';
 
@@ -10,6 +11,9 @@ const Navbar = () => {
 
   const logout=useLogout();
   const {auth}=useAuth()
+
+  // const socket = useSocket();
+  // const exercise = "pushUp";
 
   const [isDropDownOpen, setIsDropDownOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -27,6 +31,14 @@ const Navbar = () => {
     logout();
     navigate('/');
   };
+
+  // const handleVideoFeed = useCallback(
+  //   (e) => {
+  //     e.preventDefault();
+  //     socket.emit("room:join", { exercise });
+  //   },
+  //   [exercise, socket]
+  // );
 
   return (
     <nav className="navbar">

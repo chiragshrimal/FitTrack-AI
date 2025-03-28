@@ -1,6 +1,6 @@
 import app from './app.js';
 import connectToDB from './configs/dbconnection.js';
-
+import { Server } from "socket.io";
 
 const PORT = process.env.PORT || 5000;
 
@@ -10,4 +10,3 @@ app.listen(PORT, "0.0.0.0",async () => {
   await connectToDB();
   console.log(`App is running at http://localhost:${PORT}`);
 });
-
