@@ -4,7 +4,7 @@ const pushUpSchema = new Schema(
   {
     name: { type: String, required: true, default: 'PushUp' },
     count: { type: Number, required: true },
-    duration: { type: String, required: true }, // e.g., "5 min"
+    duration: { type: Number, required: true }, // e.g., "5 min"
     date: { type: Date, default: Date.now },
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },

@@ -56,9 +56,6 @@ const VideoFeed = () => {
       startTime: startTime.toISOString(), // Convert Date to string format
       stopTime: endTime.toISOString(),
     };
-
-    
-    
   
     try {
       const response = await axiosPrivate.post("/api/trainee/workout", workoutData);
