@@ -2,7 +2,6 @@ import { Schema, model } from 'mongoose';
 
 const pullUpSchema = new Schema(
   {
-    name: { type: String, required: true, default: 'PullUp' },
     count: { type: Number, required: true },
     duration: { type: String, required: true }, // e.g., "5 min"
     date: { type: Date, default: Date.now },

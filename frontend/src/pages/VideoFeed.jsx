@@ -4,6 +4,7 @@ import { useSocket } from "../context/SocketProvider";
 import useAuth from "../hooks/useAuth";
 import Webcam from "react-webcam";
 import PeerService from "../service/peer";
+import useAxiosPrivate from "../hooks/useAxiosPrivate";
 import "./VideoFeed.css";
 
 const VideoFeed = () => {
@@ -21,6 +22,9 @@ const VideoFeed = () => {
   const [repCount, setRepCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
+  const [startTime, setStartTime] = useState(null);
+  const [endTime, setEndTime] = useState(null);
+  const [sessionRepCount, setSessionRepCount] = useState(0);
 
   const exercises = [
     { id: "pushup", name: "Push-ups" },
@@ -29,6 +33,45 @@ const VideoFeed = () => {
     { id: "crunch", name: "Crunches" },
     { id: "bicepcurl", name: "Bicep Curls" }
   ];
+
+  const axiosPrivate = useAxiosPrivate();
+
+  const resetButtonClick = () => {
+    setStartTime(null);
+    setEndTime(null);
+    setRepCount(0);
+    setFeedback(null);
+    setSessionRepCount(0);
+  }
+
+  const saveRecordCount = async () => {
+    if (!currentExercise || !startTime || !endTime) {
+      console.error("Missing required data");
+      return;
+    }
+    
+    const workoutData = {
+      exercise: currentExercise, // Assuming exercise data is stored in userInfo
+      count: repCount, // Assuming repCount is available in your state
+      startTime: startTime.toISOString(), // Convert Date to string format
+      stopTime: endTime.toISOString(),
+    };
+
+    
+    
+  
+    try {
+      const response = await axiosPrivate.post("/api/trainee/workout", workoutData);
+  
+      console.log("Workout saved successfully:", response.data);
+    } catch (error) {
+      console.error("Error saving workout:", error);
+    }
+    setStartTime(null);
+    setEndTime(null);
+    setRepCount(0);
+    setFeedback(null);
+  }
 
   // Debug helper functions
   const debugSocket = () => {
@@ -96,7 +139,8 @@ const VideoFeed = () => {
     socket.on("exercise-feedback", (data) => {
       console.log("📊 Received exercise feedback:", data);
       setFeedback(data.feedback);
-      setRepCount(data.repCount);
+      // setRepCount(data.repCount);
+      setSessionRepCount(data.repCount);
     });
 
     socket.on("python-disconnected", () => {
@@ -163,8 +207,8 @@ const VideoFeed = () => {
       setConnectionError(null);
 
       // Reset stats when starting a new recording
-      setRepCount(0);
-      setFeedback(null);
+      // setRepCount(0);
+      // setFeedback(null);
 
       // Initialize PeerService
       console.log("Initializing PeerService...");
@@ -174,7 +218,7 @@ const VideoFeed = () => {
       console.log("Requesting camera access...");
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: 640, height: 480, frameRate: 30 }, 
-        audio: false 
+        audio: false
       });
       
       console.log("Camera access granted, attaching to video element");
@@ -253,6 +297,11 @@ const VideoFeed = () => {
       };
       
       console.log("Recording started successfully");
+      if(startTime == null){
+        setStartTime(new Date()); // Set the current time when recording starts
+      }
+      setEndTime(null); // Reset end time when a new recording starts
+      setSessionRepCount(0);
     } catch (err) {
       console.error("Error starting recording:", err);
       setConnectionError(`Failed to access camera: ${err.message}`);
@@ -263,6 +312,8 @@ const VideoFeed = () => {
   const stopRecording = () => {
     console.log("Stopping recording...");
     setIsRecording(false);
+
+    // send post request
     
     // Stop all tracks from webcam
     if (webcamRef.current?.srcObject) {
@@ -290,6 +341,8 @@ const VideoFeed = () => {
       PeerService.cleanup();
     }
     
+    setEndTime(new Date());
+    setRepCount(prevTotal => prevTotal + sessionRepCount);
     console.log("Recording stopped");
   };
 
@@ -360,12 +413,26 @@ const VideoFeed = () => {
               disabled={!isConnected || connectionError}
             >
               Start Recording
-            </button>
+            </button> 
+            
           ) : (
             <button className="btn-stop" onClick={stopRecording}>
               Stop Recording
             </button>
           )}
+
+        {repCount > 0 && !isRecording && (
+          <>
+            <button className="btn-start" onClick={resetButtonClick} >
+              Reset
+            </button>
+            <button className="btn-start" onClick={saveRecordCount} >
+              Save Record
+            </button>
+          </>
+        )}
+          
+          
         </div>
       </div>
 

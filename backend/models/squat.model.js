@@ -2,7 +2,6 @@ import { Schema, model } from 'mongoose';
 
 const squatSchema = new Schema(
   {
-    name: { type: String, required: true, default: 'Squat' },
     count: { type: Number, required: true },
     duration: { type: String, required: true }, // e.g., "5 min"
     date: { type: Date, default: Date.now },

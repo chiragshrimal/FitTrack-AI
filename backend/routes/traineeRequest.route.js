@@ -1,7 +1,6 @@
 import express from 'express';
 import {rejectTrainerRequest,acceptTrainerRequest,showConnectedTrainers,showRequest,removeTrainerFromTrainee} from '../controllers/traineeRequest.controller.js';
 import verifyJWT from '../middlewares/authTrainee.middleware.js';
-import { verify } from 'crypto';
 // import { protect, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();

@@ -2,7 +2,6 @@ import { Schema, model } from 'mongoose';
 
 const crunchSchema = new Schema(
   {
-    name: { type: String, required: true, default: 'Crunch' },
     count: { type: Number, required: true },
     duration: { type: String, required: true }, // e.g., "5 min"
     date: { type: Date, default: Date.now },
