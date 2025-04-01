@@ -243,7 +243,6 @@ const logoutTrainer = asyncHandler(async(req, res) => {
  
 })
 
-
 /**
  * @LOGGED_IN_USER_DETAILS
  * @ROUTE @GET

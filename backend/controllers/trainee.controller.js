@@ -2,6 +2,7 @@ import asyncHandler from '../middlewares/asyncHandler.middleware.js';
 import AppError from '../utils/appError.js';
 import User from '../models/trainee.model.js';
 import {ApiError} from '../utils/ApiError.js';
+import jwt from "jsonwebtoken";
 
 const cookieOptions = {
   secure: process.env.NODE_ENV === 'production' ? true : false,
@@ -168,12 +169,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 
   try {
-      const decodedToken = jwt.verify(
+      const refreshToken = jwt.verify(
           incomingRefreshToken,
           process.env.REFRESH_TOKEN_SECRET
       )
   
-      const user = await User.findById(decodedToken?._id)
+      const user = await User.findById(refreshToken?._id)
   
       if (!user) {
           throw new ApiError(411, "Invalid refresh token")
@@ -200,6 +201,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         accessToken,refreshToken: newRefreshToken
       })
   } catch (error) {
+    console.log(error.message);
       throw new ApiError(411, error?.message || "Invalid refresh token")
   }
 

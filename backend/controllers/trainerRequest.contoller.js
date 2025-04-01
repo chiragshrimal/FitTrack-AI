@@ -24,7 +24,7 @@ export const checkTrainee=asyncHandler(async(req,res,next)=>{
   if (!trainee) {
     return next(new AppError('Trainee not found.', 404));
   }
-  return res.status(200).json({
+  res.status(200).json({
     success: true,
     message : "Trainee exists",
     trainee
@@ -124,7 +124,7 @@ export const removeTraineeByTrainer = asyncHandler(async (req, res, next) => {
       return next(new AppError('Please provide username', 400));
     }
 
-    const trainee = await Trainee.findOne({ username });
+    const trainee = await User.findOne({ username });
     if (!trainee) {
       return next(new AppError('Invalid trainee', 400));
     }
@@ -146,9 +146,9 @@ export const removeTraineeByTrainer = asyncHandler(async (req, res, next) => {
     }
 
     // Remove trainer from trainee's list of trainers
-    await Trainee.findByIdAndUpdate(
+    await User.findByIdAndUpdate(
       trainee._id,
-      { $pull: { trainers: trainerId } },
+      { $pull: { trainer: trainerId } },
       { new: true }
     );
 
