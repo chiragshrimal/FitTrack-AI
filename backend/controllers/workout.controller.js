@@ -57,8 +57,10 @@ export const postWorkoutRecord = asyncHandler(async (req, res, next) => {
       }
 });
 
+
+// TODO
 export const fetchWorkoutByRecord = asyncHandler(async (req, res, next) => {
-    const { exercise, count } = req.query;
+    const { exercise, count, username } = req.query;
 
     // Validate input
     if (!exercise) {
@@ -66,7 +68,14 @@ export const fetchWorkoutByRecord = asyncHandler(async (req, res, next) => {
     }
 
     try {
-        const records = await PushUp.find({ name: exercise })
+
+        const trainee = await User.findOne({ username: username });
+
+        if (!trainee) {
+            return next(new AppError("User not found", 404));
+        }
+
+        const records = await PushUp.find({ name: exercise, user: trainee._id })
             .sort({ date: -1 }) 
             .limit(count);
 
@@ -97,25 +106,37 @@ export const fetchWorkoutByRecord = asyncHandler(async (req, res, next) => {
 
 
 export const fetchWorkoutByDay = asyncHandler(async (req, res, next) => {
-    const { exercise, count } = req.query;
+    const { exercise, count, username } = req.query;
 
     // Validate input
-    if (!exercise) {
-        return next(new AppError("Exercise name is required", 400));
+    if (!exercise || !username) {
+        return next(new AppError("Exercise name and username are required", 400));
     }
 
     const daysCount = parseInt(count) || 7; // Default to last 7 days if count is not provided
 
     try {
-        const today = new Date();
-        const pastDate = new Date();
-        pastDate.setDate(today.getDate() - daysCount); // Get the date 'count' days ago
+        // Find the trainee by username
+        const trainee = await User.findOne({ username }).exec();
 
+        if (!trainee) {
+            return next(new AppError("User not found", 404));
+        }
+
+        const today = new Date();
+        today.setHours(23, 59, 59, 999); // Set to end of today
+
+        const pastDate = new Date();
+        pastDate.setDate(today.getDate() - daysCount);
+        pastDate.setHours(0, 0, 0, 0); // Set to start of pastDate
+
+        // Aggregate workout records for the user
         const records = await PushUp.aggregate([
             {
                 $match: { 
                     name: exercise, 
-                    date: { $gte: pastDate } // Filter records from the last 'count' days
+                    user: new mongoose.Types.ObjectId(trainee._id), 
+                    date: { $gte: pastDate, $lte: today } // Filter records from the last 'count' days
                 }
             },
             {
@@ -123,28 +144,42 @@ export const fetchWorkoutByDay = asyncHandler(async (req, res, next) => {
                     _id: { 
                         $dateToString: { format: "%Y-%m-%d", date: "$date" } // Group by date (YYYY-MM-DD)
                     },
-                    totalDuration: { $sum: "$duration" }, // Sum duration
-                    totalCount: { $sum: "$count" }, // Sum count
-                    recordCount: { $sum: 1 } // Count number of records per date
+                    totalDuration: { $sum: "$duration" }, // Sum of duration
+                    totalCount: { $sum: "$count" }, // Sum of count
+                    recordCount: { $sum: 1 } // Total records on that date
                 }
             },
             {
-                $sort: { _id: -1 } // Sort by date in descending order (latest first)
+                $sort: { _id: -1 } // Sort by latest date first
             },
             {
-                $limit: daysCount // Limit to the latest 'count' days
+                $limit: daysCount // Return only the last 'count' days
             }
-        ]);
+        ]).exec();
 
         if (!records || records.length === 0) {
             return next(new AppError("No records found for this exercise", 404));
         }
 
-        res.status(200).json({ records });
+        // Convert `_id` (date) to IST format before returning
+        const formattedRecords = records.map(record => ({
+            date: new Date(record._id).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                year: "numeric",
+                month: "long",
+                day: "numeric"
+            }),
+            totalDuration: record.totalDuration,
+            totalCount: record.totalCount,
+            recordCount: record.recordCount
+        }));
+
+        res.status(200).json({ records: formattedRecords });
 
     } catch (err) {
         return next(new AppError(err.message, 500));
     }
 });
+
 
 

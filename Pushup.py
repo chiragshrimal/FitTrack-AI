@@ -32,12 +32,6 @@ class PushUpExerciseProcessor:
         self.pose_history = []
         self.last_position = None
     
-    def set_exercise_type(self, exercise_type):
-        """Set the current exercise type"""
-        if exercise_type != self.exercise_type:
-            self.exercise_type = exercise_type
-            self.reset_state()
-    
     def calculate_angle(self, a, b, c):
         """Calculate angle between three points"""
         a = np.array(a)  # Point A

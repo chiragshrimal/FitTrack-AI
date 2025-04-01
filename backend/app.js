@@ -192,6 +192,7 @@ import trainerRoutes from './routes/trainer.route.js';
 import trainerRequest from './routes/trainerRequest.route.js';
 import traineeRequestRoutes from './routes/traineeRequest.route.js';
 import workoutRoute from "./routes/workout.route.js";
+import workoutRouteTrainer from "./routes/workoutRouteTrainer.js";
 
 // app.use("api/trainee",traineeRequestRoutes);
 app.use('/api/trainee', traineeRoutes);
@@ -206,6 +207,7 @@ app.use('/api/trainer/request', trainerRequest);
 app.use('/api/trainee/request', traineeRequestRoutes);
 
 app.use('/api/trainee/workout', workoutRoute);
+app.use('/api/trainer/workout', workoutRouteTrainer);
 
 // Default catch all route - 404
 app.all('*', (_req, res) => {

@@ -7,11 +7,9 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaRelay
 from av import VideoFrame
 from Pushup import PushUpExerciseProcessor
+from crunches import CrunchExerciseProcessor
+from pullup import PullUpExerciseProcessor
 import time
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("socketio")
 
 # Initialize WebSocket client for signaling
 sio = socketio.AsyncClient(
@@ -30,6 +28,16 @@ relay = MediaRelay()
 # Global state
 current_exercise = "pushup"
 last_feedback_time = 0
+
+def get_exercise_processor(exercise_type):
+    """Returns the appropriate exercise processor based on type"""
+    if exercise_type.lower() == "crunch":
+        return CrunchExerciseProcessor()
+    elif exercise_type.lower() == "pullup":
+        return PullUpExerciseProcessor()
+    else:
+        # Default to pushup processor
+        return PushUpExerciseProcessor()
 
 # Video processing track
 class VideoProcessTrack(MediaStreamTrack):
@@ -59,20 +67,10 @@ class VideoProcessTrack(MediaStreamTrack):
         self.processing_queue = asyncio.Queue(maxsize=1)
         
         # Initialize exercise processor
-        self.processor = PushUpExerciseProcessor()
-        self.processor.set_exercise_type(exercise_type)
+        self.processor = get_exercise_processor(exercise_type)
         
-                # Start the background processing task
+        # Start the background processing task
         self.processing_task = asyncio.create_task(self._background_processor())
-        
-        # logger.info(f"Starting processing with exercise type: {exercise_type}")
-        
-        # logger.info(f"Starting processing with exercise type: {exercise_type}")
-
-    def update_exercise_type(self, new_type):
-        """Update the exercise type being processed"""
-        # logger.info(f"Updating exercise type to {new_type}")
-        self.processor.set_exercise_type(new_type)
 
     async def _background_processor(self):
         """Background task that processes frames asynchronously."""
@@ -96,7 +94,6 @@ class VideoProcessTrack(MediaStreamTrack):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                # logger.error(f"Error in background processor: {e}")
                 await asyncio.sleep(0.1)  # Prevent tight loop on errors
 
 
@@ -105,24 +102,6 @@ class VideoProcessTrack(MediaStreamTrack):
         global last_feedback_time
         
         frame = await self.track.recv()
-        # current_time = time.time()
-
-        # FPS Calculation
-        # if self.last_frame_time is not None:
-        #     time_diff = current_time - self.last_frame_time
-        #     if time_diff > 0:
-        #         self.fps = round(1.0 / time_diff, 2)  # Calculate FPS with two decimal precision
-
-        # self.last_frame_time = current_time  # Update last frame time
-        
-        # # Initialize frame counter if needed
-        # if not hasattr(self, 'frame_count'):
-        #     self.frame_count = 0
-        # self.frame_count += 1
-            
-        # # Only process every 2nd or 3rd frame
-        # if self.frame_count % 3 != 0:
-        #     return frame  # Return original frame unprocessed
         
         img = frame.to_ndarray(format="bgr24")  # Convert frame to OpenCV format
         # Downscale image
@@ -196,14 +175,11 @@ async def send_feedback(analysis):
 @sio.event
 async def connect():
     """Handles WebSocket connection to Node.js"""
-    print("📡 Connected to Node.js Signaling Server!")
     await sio.emit("connect-python")
-    print("✅ Sent 'connect-python' event to Node.js")
 
 @sio.event
 async def disconnect():
     """Handles WebSocket disconnection."""
-    print("🔴 Disconnected from WebSocket Server!")
     # Clean up any existing peer connection
     global pc
     if pc:
@@ -215,12 +191,9 @@ async def on_offer(data):
     """Receives SDP Offer from Node.js and sends SDP Answer."""
     global pc, current_exercise
     
-    print("🎥 Received SDP Offer from Node.js")
-    
     # Extract exercise type from offer
     exercise_type = data.get("exerciseType", "pushup")
     current_exercise = exercise_type
-    print(f"🏋️ Exercise Type: {exercise_type}")
     
     # Close any existing peer connection
     if pc:
@@ -233,7 +206,6 @@ async def on_offer(data):
     @pc.on("track")
     def on_track(track):
         if track.kind == "video":
-            print("📡 Video Track Received! Processing...")
             # Create video processing track with the specified exercise type
             processed_track = VideoProcessTrack(track, exercise_type)
             pc.addTrack(processed_track)
@@ -243,12 +215,11 @@ async def on_offer(data):
     def on_datachannel(channel):
         @channel.on("message")
         def on_message(message):
-            print(f"💬 Received message from data channel: {message}")
+            pass
     
     # Set up connection state change handlers
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
-        print(f"Connection state changed to: {pc.connectionState}")
         if pc.connectionState == "failed" or pc.connectionState == "closed":
             # Clean up if connection fails
             if pc:
@@ -267,46 +238,25 @@ async def on_offer(data):
         "type": "answer", 
         "sdp": pc.localDescription.sdp
     })
-    print("📨 Sent SDP Answer to Node.js")
 
 @sio.on("ice-candidate")
 async def on_ice_candidate(data):
     """Handles ICE Candidate exchange for NAT Traversal."""
     global pc
-    print("❄️ Received ICE Candidate from Node.js")
     if pc and data:
         await pc.addIceCandidate(data)
-
-@sio.on("exercise-change")
-async def on_exercise_change(data):
-    """Handle exercise type changes during an active session"""
-    global current_exercise
-    
-    new_exercise = data.get("exerciseType")
-    if new_exercise and new_exercise != current_exercise:
-        print(f"🔄 Changing exercise from {current_exercise} to {new_exercise}")
-        current_exercise = new_exercise
-        
-        # Update the exercise type for the processing track
-        if pc:
-            for sender in pc.getSenders():
-                if sender.track and isinstance(sender.track, VideoProcessTrack):
-                    sender.track.update_exercise_type(new_exercise)
 
 async def connect_to_server():
     """Connects to the WebSocket signaling server."""
     try:
-        print("🔄 Attempting WebSocket Connection...")
         await sio.connect(
             "http://localhost:5002",
             socketio_path="/socket.io/",
             transports=["websocket"],
             wait_timeout=15
         )
-        print("✅ Connected to WebSocket Server!")
         return True
     except socketio.exceptions.ConnectionError as e:
-        print(f"❌ WebSocket Connection Error: {e}")
         return False
 
 async def main():
@@ -318,26 +268,21 @@ async def main():
         connected = await connect_to_server()
         if not connected:
             retry_count += 1
-            print(f"⚠️ Connection attempt {retry_count} failed. Retrying in 5 seconds...")
             await asyncio.sleep(5)
     
     if not connected:
-        print("⚠️ Failed to connect after multiple attempts. Exiting.")
         return
         
     try:
         # Keep connection alive
         while True:
             await asyncio.sleep(30)  # Keep-alive check
-            if sio.connected:
-                print("📶 Connection active")
-            else:
-                print("⚠️ Connection lost, reconnecting...")
+            if not sio.connected:
                 await connect_to_server()
     except asyncio.CancelledError:
-        print("⚠️ Task cancelled")
+        pass
     except KeyboardInterrupt:
-        print("⚠️ Program interrupted by user")
+        pass
     finally:
         # Cleanup
         global pc
@@ -346,12 +291,10 @@ async def main():
             pc = None
             
         if sio.connected:
-            print("🧹 Closing connection...")
             await sio.disconnect()
-        print("✅ Cleanup complete")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("⚠️ Program terminated by user")
+        pass
