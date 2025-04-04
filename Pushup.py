@@ -112,6 +112,7 @@ class PushUpExerciseProcessor:
     
     def process_frame(self, img):
         """Process video frame using MediaPipe Pose"""
+        print("pushup received frame")
         # Convert to RGB for MediaPipe
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         

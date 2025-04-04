@@ -2,150 +2,176 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
-# Constants and thresholds
-UP_THRESHOLD = 80  # Elbow flexion for up position
-DOWN_THRESHOLD = 140  # Elbow extension for down position
-
-# Initialize Mediapipe Pose
+# Initialize MediaPipe Pose
 mp_pose = mp.solutions.pose
 mp_drawing = mp.solutions.drawing_utils
 
-# Angle calculation function
-def calculate_angle(a, b, c):
-    a = np.array(a)
-    b = np.array(b)
-    c = np.array(c)
+# Define ideal angles and thresholds
+IDEAL_ANGLES = {
+    "bicepcurl": {
+        "elbow_up": 70,
+        "elbow_down": 160,
+        "shoulder_angle": 0,
+        "back_angle": 180
+    }
+}
 
-    ba = a - b
-    bc = c - b
-
-    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-    angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
-
-    return np.degrees(angle)
-
-# Posture accuracy evaluation
-def posture_accuracy(elbow_angle, shoulder_angle, back_angle):
-    ideal_elbow_up = 70
-    ideal_elbow_down = 160
-    ideal_shoulder_angle = 0
-    ideal_back_angle = 180
-
-    elbow_deviation_up = abs(elbow_angle - ideal_elbow_up)
-    elbow_deviation_down = abs(elbow_angle - ideal_elbow_down)
-    shoulder_deviation = abs(shoulder_angle - ideal_shoulder_angle)
-
-    if shoulder_deviation < 30:
-        shoulder_deviation = shoulder_deviation / 10
-    else:
-        shoulder_deviation = shoulder_deviation * 3  # Penalize more for larger deviations
-    back_deviation = abs(back_angle - ideal_back_angle)
-
-    # Calculate accuracy
-    elbow_accuracy = max(0, 100 - ((elbow_deviation_up / ideal_elbow_up)/5) * 100)
+class BicepCurlExerciseProcessor:
+    def __init__(self):
+        self.pose = mp_pose.Pose(min_detection_confidence=0.9, min_tracking_confidence=0.9, static_image_mode=False)
+        self.rep_count = 0
+        self.curl_down = False
+        self.hold_frames = 0
+        self.frame_hold_threshold = 0
+        self.accuracy_per_curl = 0
+        self.accuracy_up = 0
+        self.accuracy_down = 0
+        self.exercise_type = "bicepcurl"
+        self.last_position = None
+        
+        # Constants for curl detection
+        self.UP_THRESHOLD = 80
+        self.DOWN_THRESHOLD = 140
     
-    # Normalize shoulder deviation with a constant to avoid division by zero
-    shoulder_accuracy = max(0, 100 - (shoulder_deviation / 1))
+    def reset_state(self):
+        """Reset exercise state"""
+        self.rep_count = 0
+        self.curl_down = False
+        self.hold_frames = 0
+        self.accuracy_per_curl = 0
+        self.last_position = None
     
-    back_accuracy = max(0, 100 - ((back_deviation / ideal_back_angle)/5) * 100)
+    def calculate_angle(self, a, b, c):
+        """Calculate angle between three points"""
+        a = np.array(a)
+        b = np.array(b)
+        c = np.array(c)
 
-    # Weighted average for overall accuracy
-    overall_accuracy = (elbow_accuracy * 0.2) + (shoulder_accuracy * 0.4) + (back_accuracy * 0.4)
-    return overall_accuracy
+        ba = a - b
+        bc = c - b
 
-# Video input
-video_path = 'Gym_Project/bicep1.mp4'
-cap = cv2.VideoCapture(video_path)
+        cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+        angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
 
-# Curl variables
-curl_count = 0
-curl_down = False
-hold_frames = 0
-frame_hold_threshold = 0
+        return np.degrees(angle)
+    
+    def posture_accuracy(self, elbow_angle, shoulder_angle, back_angle):
+        """Calculate posture accuracy based on ideal angles"""
+        ideal_elbow_up = IDEAL_ANGLES[self.exercise_type]["elbow_up"]
+        ideal_elbow_down = IDEAL_ANGLES[self.exercise_type]["elbow_down"]
+        ideal_shoulder_angle = IDEAL_ANGLES[self.exercise_type]["shoulder_angle"]
+        ideal_back_angle = IDEAL_ANGLES[self.exercise_type]["back_angle"]
 
-# New variables for accuracy detection
-cumulative_accuracy = 0
-accuracy_frames = 0
-accuracy_per_curl = 0
+        elbow_deviation_up = abs(elbow_angle - ideal_elbow_up)
+        elbow_deviation_down = abs(elbow_angle - ideal_elbow_down)
+        shoulder_deviation = abs(shoulder_angle - ideal_shoulder_angle)
 
-# Mediapipe Pose
-with mp_pose.Pose(min_detection_confidence=0.9, min_tracking_confidence=0.9) as pose:
+        if shoulder_deviation < 30:
+            shoulder_deviation = shoulder_deviation / 10
+        else:
+            shoulder_deviation = shoulder_deviation * 3  # Penalize more for larger deviations
+        back_deviation = abs(back_angle - ideal_back_angle)
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
+        # Calculate accuracy
+        elbow_accuracy = max(0, 100 - ((elbow_deviation_up / ideal_elbow_up)/5) * 100)
+        
+        # Normalize shoulder deviation with a constant to avoid division by zero
+        shoulder_accuracy = max(0, 100 - (shoulder_deviation / 1))
+        
+        back_accuracy = max(0, 100 - ((back_deviation / ideal_back_angle)/5) * 100)
 
-        # Convert image to RGB
-        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        pose_results = pose.process(image)
+        # Weighted average for overall accuracy
+        overall_accuracy = (elbow_accuracy * 0.2) + (shoulder_accuracy * 0.4) + (back_accuracy * 0.4)
+        return overall_accuracy
+    
+    def process_frame(self, img):
+        """Process video frame using MediaPipe Pose"""
+        # Convert to RGB for MediaPipe
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # Process the image
+        results = self.pose.process(img_rgb)
+        
+        # Convert back to BGR
+        processed_img = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        
+        landmarks = None
+        if results.pose_landmarks:
+            landmarks = results.pose_landmarks.landmark
+            mp_drawing.draw_landmarks(processed_img, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+        
+        return processed_img, landmarks
+    
+    def analyze_exercise(self, landmarks):
+        """Analyze exercise form and count reps"""
+        if not landmarks:
+            return {
+                "form": "No pose detected",
+                "accuracy": 0,
+                "position": None,
+                "repCount": self.rep_count,
+                "angles": {}
+            }
+        
+        # Extract key landmarks for bicep curls
+        shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x,
+                    landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
+        elbow = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x,
+                landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
+        wrist = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x,
+                landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
+        hip = [landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x,
+                landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y]
 
-        # Convert back to BGR for OpenCV
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        # Calculate angles
+        elbow_angle = self.calculate_angle(shoulder, elbow, wrist)
+        shoulder_angle = self.calculate_angle(hip, shoulder, elbow)
+        # Create a vertical reference slightly above the shoulder to calculate back angle
+        back_angle = self.calculate_angle(hip, shoulder, [shoulder[0], shoulder[1] - 0.1])
+        
+        # Curl logic
+        if elbow_angle > self.DOWN_THRESHOLD and not self.curl_down:
+            self.curl_down = True
+            self.hold_frames = 0
+            
+            # TODO inspect later
+            self.last_position = "down"
+            self.accuracy_down = self.posture_accuracy(elbow_angle, shoulder_angle, back_angle)
 
-        if pose_results.pose_landmarks:
-            # Extract landmarks
-            landmarks = pose_results.pose_landmarks.landmark
+        if not self.curl_down and elbow_angle <= self.UP_THRESHOLD:
+            self.hold_frames += 1
+            
+            self.last_position = "up"
 
-            # Get required key points
-            shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x,
-                        landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
-            elbow = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x,
-                     landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
-            wrist = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x,
-                     landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
-            hip = [landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x,
-                   landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y]
+        if self.curl_down and elbow_angle > self.DOWN_THRESHOLD and self.hold_frames >= self.frame_hold_threshold:
+            self.accuracy_down = self.posture_accuracy(elbow_angle, shoulder_angle, back_angle)
+            self.curl_down = False
 
-            # Calculate angles
-            elbow_angle = calculate_angle(shoulder, elbow, wrist)
-            shoulder_angle = calculate_angle(hip, shoulder, elbow)
-            # Create a vertical reference slightly above the shoulder to calculate back angle
-            back_angle = calculate_angle(hip, shoulder, [shoulder[0], shoulder[1] - 0.1])
-
-            # Display angles
-            cv2.putText(image, f'Elbow: {int(elbow_angle)}', (20, 50),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv2.LINE_AA)
-            cv2.putText(image, f'Shoulder: {int(shoulder_angle)}', (20, 80),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(image, f'Back: {int(back_angle)}', (20, 110),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2, cv2.LINE_AA)
-
-            # Curl logic
-            if elbow_angle > DOWN_THRESHOLD and not curl_down:
-                curl_down = True
-                hold_frames = 0
-
-            if not curl_down and elbow_angle <= UP_THRESHOLD:
-                hold_frames += 1
-
-            if curl_down and elbow_angle > DOWN_THRESHOLD and hold_frames >= frame_hold_threshold:
-                accuracy_down = posture_accuracy(elbow_angle, shoulder_angle, back_angle)
-                curl_down = False
-
-            if not curl_down and elbow_angle <= UP_THRESHOLD and hold_frames >= frame_hold_threshold:
-                accuracy_up = posture_accuracy(elbow_angle, shoulder_angle, back_angle)
-                accuracy_per_curl = (accuracy_up + accuracy_down) / 2
-                curl_count += 1
-                hold_frames = 0
-                curl_down=True
-
-            # Display accuracy
-            cv2.putText(image, f'Accuracy: {int(accuracy_per_curl)}%', (20, 170),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2, cv2.LINE_AA)
-
-            # Display curl count
-            cv2.putText(image, f'Curls: {curl_count}', (20, 200),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
-
-            # Draw landmarks
-            mp_drawing.draw_landmarks(image, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-
-        # Display frame
-        cv2.imshow('Bicep Curl Counter', image)
-
-        if cv2.waitKey(10) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
+        if not self.curl_down and elbow_angle <= self.UP_THRESHOLD and self.hold_frames >= self.frame_hold_threshold:
+            self.accuracy_up = self.posture_accuracy(elbow_angle, shoulder_angle, back_angle)
+            self.accuracy_per_curl = (self.accuracy_up + self.accuracy_down) / 2 
+            self.rep_count += 1
+            self.hold_frames = 0
+            self.curl_down = True
+            
+        # Generate form feedback based on accuracy
+        if self.accuracy_per_curl < 50:
+            form_feedback = "Poor form, fix posture"
+        elif self.accuracy_per_curl < 75:
+            form_feedback = "Improve form"
+        elif self.accuracy_per_curl < 90:
+            form_feedback = "Good form"
+        else:
+            form_feedback = "Excellent form!"
+            
+        return {
+            "form": form_feedback,
+            "accuracy": self.accuracy_per_curl,
+            "position": self.last_position,
+            "repCount": self.rep_count,
+            "angles": {
+                "elbow_angle": elbow_angle,
+                "shoulder_angle": shoulder_angle,
+                "back_angle": back_angle
+            }
+        }

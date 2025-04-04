@@ -9,6 +9,7 @@ import "./VideoFeed.css";
 
 const VideoFeed = () => {
   const { auth } = useAuth();
+
   if (auth?.user?.userType !== "trainee") {
     return <Navigate to="/access-denied" replace />;
   }
@@ -25,6 +26,9 @@ const VideoFeed = () => {
   const [startTime, setStartTime] = useState(null);
   const [endTime, setEndTime] = useState(null);
   const [sessionRepCount, setSessionRepCount] = useState(0);
+  const [remoteStreamInfo, setRemoteStreamInfo] = useState(null);
+  const [showRemoteVideo, setShowRemoteVideo] = useState(true);
+  const [connectionPhase, setConnectionPhase] = useState("disconnected");
 
   const exercises = [
     { id: "pushup", name: "Push-ups" },
@@ -36,14 +40,16 @@ const VideoFeed = () => {
 
   const axiosPrivate = useAxiosPrivate();
 
+  // WHEN THE RESET BUTTON IS CLICKED
   const resetButtonClick = () => {
     setStartTime(null);
     setEndTime(null);
     setRepCount(0);
     setFeedback(null);
     setSessionRepCount(0);
-  }
+  };
 
+  // WHEN SAVED RECORD BUTTON IS CLICKED
   const saveRecordCount = async () => {
     if (!currentExercise || !startTime || !endTime) {
       console.error("Missing required data");
@@ -51,15 +57,14 @@ const VideoFeed = () => {
     }
     
     const workoutData = {
-      exercise: currentExercise, // Assuming exercise data is stored in userInfo
-      count: repCount, // Assuming repCount is available in your state
-      startTime: startTime.toISOString(), // Convert Date to string format
+      exercise: currentExercise,
+      count: repCount,
+      startTime: startTime.toISOString(),
       stopTime: endTime.toISOString(),
     };
   
     try {
       const response = await axiosPrivate.post("/api/trainee/workout", workoutData);
-  
       console.log("Workout saved successfully:", response.data);
     } catch (error) {
       console.error("Error saving workout:", error);
@@ -68,22 +73,17 @@ const VideoFeed = () => {
     setEndTime(null);
     setRepCount(0);
     setFeedback(null);
-  }
+  };
 
-  // Debug helper functions
+  // DEBUG SOCKET, CONSOLE IF SOCKET IS NULL ELSE DO NOTHING
   const debugSocket = () => {
     if (!socket) {
       console.error("Socket is null or undefined");
       return;
     }
-    
-    console.log("Socket state:", {
-      id: socket.id,
-      connected: socket.connected,
-      disconnected: socket.disconnected
-    });
   };
 
+  // CONSOLE THE PEER CONNECTION STATE OR CONSOLE PEER NOT INITIALIZED
   const logPeerConnectionState = () => {
     if (!PeerService.peer) {
       console.log("PeerConnection not initialized");
@@ -98,41 +98,77 @@ const VideoFeed = () => {
     });
   };
 
+  // Periodically check stream status when recording
+  useEffect(() => {
+    if (!isRecording) return;
+    
+    const checkInterval = setInterval(() => {
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject) {
+        const tracks = remoteVideoRef.current.srcObject.getTracks();
+        const info = {
+          time: new Date().toISOString(),
+          tracks: tracks.length,
+          active: remoteVideoRef.current.srcObject.active,
+          paused: remoteVideoRef.current.paused,
+          readyState: remoteVideoRef.current.readyState,
+          trackDetails: tracks.map(t => ({
+            kind: t.kind,
+            enabled: t.enabled,
+            muted: t.muted,
+            readyState: t.readyState
+          }))
+        };
+        console.log("Stream check:", info);
+        setRemoteStreamInfo(info);
+      } else {
+        console.log("No remote stream available for status check");
+      }
+    }, 3000);
+    
+    return () => clearInterval(checkInterval);
+  }, [isRecording]);
+
+  // handles websocket communication of connect, webrtc answer, ice candidate, feedback and disconnection
   useEffect(() => {
     if (!socket) return;
     setIsConnected(true);
     setConnectionError(null);
 
+    // CONSOLE CONNECTED TO WEBSOCKET
     socket.on("connect", () => {
       console.log("✅ Connected to WebSocket:", socket.id);
       debugSocket();
     });
 
-    socket.on("webrtc-answer", async (data) => {
-      console.log("📡 Received SDP Answer, setting remote description...");
+    // Receive answer and set you local description else log error
+    socket.on("webrtc-answer", async (answer) => {
+      console.log("Received SDP answer from server");
       try {
-        await PeerService.setLocalDescription(data);
-        logPeerConnectionState();
+        await PeerService.peer.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log("Remote description set successfully");
       } catch (err) {
-        console.error("Failed to set remote description:", err);
-        setConnectionError("Failed to establish video connection");
+        console.error("Error setting remote description:", err);
+        setConnectionError(`Failed to establish connection: ${err.message}`);
       }
     });
 
-    socket.on("ice-candidate", async (data) => {
-      console.log("📡 Received ICE Candidate, adding...");
+    // Add ice candidate if received any otherwise console whatever error faced
+    socket.on("ice-candidate", async (candidate) => {
+      console.log("Received ICE candidate from server");
       try {
-        if (PeerService.peer) {
-          await PeerService.peer.addIceCandidate(new RTCIceCandidate(data));
-          console.log("ICE candidate added successfully");
+        if (PeerService.peer.remoteDescription) {
+          await PeerService.peer.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log("Added received ICE candidate");
         } else {
-          console.error("Cannot add ICE candidate: peer connection not initialized");
+          console.warn("Received ICE candidate before remote description, queuing...");
+          // You might want to implement a queue for ICE candidates received before the remote description
         }
       } catch (err) {
-        console.error("Failed to add ICE candidate:", err);
+        console.error("Error adding received ICE candidate:", err);
       }
     });
-
+    
+    // get the feedback from websocket and update Feedback and RepCount
     socket.on("exercise-feedback", (data) => {
       console.log("📊 Received exercise feedback:", data);
       setFeedback(data.feedback);
@@ -140,12 +176,14 @@ const VideoFeed = () => {
       setSessionRepCount(data.repCount);
     });
 
+    // If the python files gets disconnected then Set Connection Error
     socket.on("python-disconnected", () => {
       console.log("❌ AI processing server is offline");
       setConnectionError("AI processing server is offline");
       stopRecording();
     });
 
+    // Disconnection yourself from server
     socket.on("disconnect", () => {
       console.log("❌ Disconnected from WebSocket");
       setIsConnected(false);
@@ -167,20 +205,7 @@ const VideoFeed = () => {
     };
   }, [socket]);
 
-  // Periodic connection status check
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (isRecording) {
-        console.log("--- Periodic connection check ---");
-        debugSocket();
-        logPeerConnectionState();
-      }
-    }, 5000); // Check every 5 seconds while recording
-    
-    return () => clearInterval(interval);
-  }, [isRecording]);
-
-  // Component cleanup
+  // Cleanup the PeerService and stop recording
   useEffect(() => {
     // Cleanup function to ensure WebRTC is properly cleaned up when component unmounts
     return () => {
@@ -200,17 +225,18 @@ const VideoFeed = () => {
     
     try {
       console.log("Starting recording...");
-      setIsRecording(true);
-      setConnectionError(null);
-
-      // Reset stats when starting a new recording
-      // setRepCount(0);
-      // setFeedback(null);
-
+    setIsRecording(true);
+    setConnectionError(null);
+    setRemoteStreamInfo(null);
+    setConnectionPhase("connecting");
+  
       // Initialize PeerService
       console.log("Initializing PeerService...");
       PeerService.init();
-
+  
+      // Set up connection state monitoring first (before adding tracks)
+      setupConnectionMonitoring();
+  
       // Get webcam stream
       console.log("Requesting camera access...");
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -221,35 +247,13 @@ const VideoFeed = () => {
       console.log("Camera access granted, attaching to video element");
       webcamRef.current.srcObject = stream;
       
-      // Attach the stream to WebRTC Peer Connection
+      // Add tracks to peer connection
       console.log("Adding tracks to peer connection");
       stream.getTracks().forEach((track) => {
         PeerService.peer.addTrack(track, stream);
         console.log(`Added ${track.kind} track to peer connection`);
       });
-
-      // Add event handlers for connection monitoring
-      PeerService.peer.oniceconnectionstatechange = () => {
-        const state = PeerService.peer.iceConnectionState;
-        console.log("ICE Connection state change:", state);
-        logPeerConnectionState();
-        
-        if (state === "failed" || state === "disconnected" || state === "closed") {
-          console.error(`ICE Connection state: ${state}`);
-          setConnectionError(`ICE Connection ${state}`);
-          
-          // Only stop recording if it was previously recording successfully
-          if (isRecording) {
-            stopRecording();
-          }
-        }
-      };
-
-      PeerService.peer.onsignalingstatechange = () => {
-        console.log("Signaling state change:", PeerService.peer.signalingState);
-        logPeerConnectionState();
-      };
-
+  
       // Create and send SDP Offer with exercise type
       console.log("Creating SDP offer...");
       const offer = await PeerService.getOffer();
@@ -259,45 +263,31 @@ const VideoFeed = () => {
         type: offer.type,
         exerciseType: currentExercise 
       });
-
-      // Handle incoming video stream (processed by Python AI)
-      PeerService.peer.ontrack = (event) => {
-        console.log("📡 Received processed video track!");
-        if (remoteVideoRef.current) {
-          console.log("Attaching remote stream to video element");
-          remoteVideoRef.current.srcObject = event.streams[0];
-        } else {
-          console.error("Remote video reference is not available");
-        }
-      };
-
-      // Handle ICE Candidate exchange
-      PeerService.peer.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log("📡 ICE candidate generated, sending to server...");
-          socket.emit("ice-candidate", event.candidate);
-        }
-      };
-
-      // Handle connection state changes
-      PeerService.peer.onconnectionstatechange = () => {
-        const state = PeerService.peer.connectionState;
-        console.log("WebRTC connection state:", state);
-        
-        if (state === "failed" || state === "disconnected" || state === "closed") {
-          console.error(`WebRTC connection ${state}`);
-          setConnectionError(`WebRTC connection ${state}`);
+  
+      // Set a connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (PeerService.peer.connectionState !== "connected") {
+          console.error("Connection timeout reached");
+          setConnectionError("Connection timeout - please try again");
           stopRecording();
-        } else if (state === "connected") {
-          console.log("WebRTC connection established successfully!");
+        }
+      }, 15000); // 15 second timeout
+  
+      // Clear timeout when connected successfully
+      const clearTimeoutOnConnect = () => {
+        if (PeerService.peer.connectionState === "connected") {
+          clearTimeout(connectionTimeout);
+          // Remove this listener once we're connected
+          PeerService.peer.removeEventListener("connectionstatechange", clearTimeoutOnConnect);
         }
       };
-      
+      PeerService.peer.addEventListener("connectionstatechange", clearTimeoutOnConnect);
+  
       console.log("Recording started successfully");
       if(startTime == null){
-        setStartTime(new Date()); // Set the current time when recording starts
+        setStartTime(new Date());
       }
-      setEndTime(null); // Reset end time when a new recording starts
+      setEndTime(null);
       setSessionRepCount(0);
     } catch (err) {
       console.error("Error starting recording:", err);
@@ -305,12 +295,125 @@ const VideoFeed = () => {
       setIsRecording(false);
     }
   };
+  
+  // Extract connection monitoring to a separate function
+  const setupConnectionMonitoring = () => {
+    // Handle incoming video stream (processed by Python AI)
+    PeerService.peer.ontrack = (event) => {
+      console.log("📡 Received processed video track!", event.streams);
+      
+      // Debug stream info
+      const streamInfo = {
+        active: event.streams[0]?.active,
+        id: event.streams[0]?.id,
+        tracks: event.streams[0]?.getTracks().map(t => ({
+          kind: t.kind,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState
+        }))
+      };
+      console.log("Stream info:", streamInfo);
+      
+      if (remoteVideoRef.current && event.streams[0]) {
+        console.log("Attaching remote stream to video element");
+        
+        // Remove any existing streams first
+        if (remoteVideoRef.current.srcObject) {
+          remoteVideoRef.current.srcObject.getTracks().forEach(track => track.stop());
+          remoteVideoRef.current.srcObject = null;
+        }
+        
+        // Set the new stream
+        remoteVideoRef.current.srcObject = event.streams[0];
+        
+        // Force play
+        remoteVideoRef.current.play().catch(err => {
+          console.error("Error playing remote video:", err);
+        });
+
+        // Add a track event listener to monitor when frames start flowing
+      const videoTrack = event.streams[0].getVideoTracks()[0];
+      if (videoTrack) {
+        // Create a frame counter to detect when real frames (not blank) are flowing
+        let frameCounter = 0;
+        const frameInterval = setInterval(() => {
+          if (remoteVideoRef.current?.srcObject?.active) {
+            frameCounter++;
+            if (frameCounter > 10) {
+              console.log("Stream appears to be flowing with real frames");
+              setConnectionPhase("established");
+              clearInterval(frameInterval);
+            }
+          }
+        }, 500);
+      }
+
+      } else {
+        console.error("Remote video reference is not available or no streams");
+      }
+    };
+  
+    // Single ICE candidate handler with error handling
+    PeerService.peer.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log("📡 ICE candidate generated:", event.candidate);
+        try {
+          socket.emit("ice-candidate", event.candidate);
+        } catch (err) {
+          console.error("❌ Failed to send ICE candidate to server:", err);
+        }
+      } else {
+        console.log("ICE candidate gathering complete");
+      }
+    };
+  
+    // Monitor ICE connection state
+    PeerService.peer.oniceconnectionstatechange = () => {
+      const state = PeerService.peer.iceConnectionState;
+      console.log("ICE Connection state change:", state);
+      logPeerConnectionState();
+      
+      if (state === "checking") {
+        setConnectionPhase("ice-negotiation");
+      } else if (state === "connected" || state === "completed") {
+        setConnectionPhase("connected");
+      } else if (state === "failed" || state === "disconnected" || state === "closed") {
+        console.error(`ICE Connection state: ${state}`);
+        setConnectionError(`ICE Connection ${state}`);
+        setConnectionPhase("disconnected");
+        
+        if (isRecording) {
+          stopRecording();
+        }
+      }
+    };
+  
+    // Monitor signaling state
+    PeerService.peer.onsignalingstatechange = () => {
+      console.log("Signaling state change:", PeerService.peer.signalingState);
+      logPeerConnectionState();
+    };
+  
+    // Monitor overall connection state
+    PeerService.peer.onconnectionstatechange = () => {
+      const state = PeerService.peer.connectionState;
+      console.log("WebRTC connection state:", state);
+      
+      if (state === "failed" || state === "disconnected" || state === "closed") {
+        console.error(`WebRTC connection ${state}`);
+        setConnectionError(`WebRTC connection ${state}`);
+        stopRecording();
+      } else if (state === "connected") {
+        console.log("WebRTC connection established successfully!");
+      }
+    };
+  };
 
   const stopRecording = () => {
+    
     console.log("Stopping recording...");
     setIsRecording(false);
-
-    // send post request
     
     // Stop all tracks from webcam
     if (webcamRef.current?.srcObject) {
@@ -352,6 +455,20 @@ const VideoFeed = () => {
     }
   }, [currentExercise, isRecording, isConnected, socket]);
 
+  // Helper function to format video track status for display
+  const getVideoStatus = () => {
+    if (!remoteVideoRef.current) return "No video ref";
+    if (!remoteVideoRef.current.srcObject) return "No stream";
+    
+    const tracks = remoteVideoRef.current.srcObject.getTracks();
+    if (tracks.length === 0) return "No tracks";
+    
+    const videoTracks = tracks.filter(t => t.kind === "video");
+    if (videoTracks.length === 0) return "No video tracks";
+    
+    return `${videoTracks.length} video track(s), ${videoTracks[0].readyState}`;
+  };
+
   return (
     <div className="video-feed">
       <div className="video-container">
@@ -375,8 +492,34 @@ const VideoFeed = () => {
 
         {/* Webcam Feed */}
         <div className="webcam-container">
-          <video ref={webcamRef} autoPlay playsInline muted className="webcam" />
-          <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
+          <video 
+            ref={webcamRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="webcam" 
+            style={{ display: showRemoteVideo ? 'none' : 'block' }}
+          />
+          
+          <video 
+            ref={remoteVideoRef} 
+            autoPlay 
+            playsInline 
+            className="remote-video" 
+            style={{ display: showRemoteVideo ? 'block' : 'none' }}
+            onLoadedMetadata={() => console.log("Remote video metadata loaded")}
+            onPlay={() => console.log("Remote video playback started")}
+            onError={(e) => console.error("Remote video error:", e)}
+          />
+          
+          {/* Diagnostic overlay */}
+          <div className="diagnostic-overlay">
+            <p>Connect: {PeerService.peer?.connectionState || 'Not initialized'}</p>
+            <p>ICE: {PeerService.peer?.iceConnectionState || 'Not initialized'}</p>
+            <p>Phase: {connectionPhase}</p>
+            <p>Video: {getVideoStatus()}</p>
+            <p>Ready: {remoteVideoRef.current?.readyState >= 2 ? 'Yes' : 'No'}</p>
+          </div>
           
           {feedback && (
             <div className="feedback-overlay">
@@ -411,25 +554,30 @@ const VideoFeed = () => {
             >
               Start Recording
             </button> 
-            
           ) : (
             <button className="btn-stop" onClick={stopRecording}>
               Stop Recording
             </button>
           )}
 
-        {repCount > 0 && !isRecording && (
-          <>
-            <button className="btn-start" onClick={resetButtonClick} >
-              Reset
-            </button>
-            <button className="btn-start" onClick={saveRecordCount} >
-              Save Record
-            </button>
-          </>
-        )}
-          
-          
+          <button 
+            className="btn-toggle" 
+            onClick={() => setShowRemoteVideo(!showRemoteVideo)}
+            disabled={!isRecording}
+          >
+            {showRemoteVideo ? "Show Local Camera" : "Show Processed Video"}
+          </button>
+
+          {repCount > 0 && !isRecording && (
+            <>
+              <button className="btn-start" onClick={resetButtonClick}>
+                Reset
+              </button>
+              <button className="btn-start" onClick={saveRecordCount}>
+                Save Record
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -454,6 +602,10 @@ const VideoFeed = () => {
           <p className={isConnected ? "connected" : "disconnected"}>
             {isConnected ? "Connected" : "Disconnected"}
           </p>
+        </div>
+        <div className="stat-item">
+          <h3>View Mode</h3>
+          <p>{showRemoteVideo ? "Processed Video" : "Local Camera"}</p>
         </div>
       </div>
     </div>

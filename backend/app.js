@@ -30,9 +30,6 @@ let pythonSocket = null;
 const connectedClients = new Map(); // Map to track client connections
 
 // Log connected clients count every minute
-setInterval(() => {
-  console.log(`🔢 Connected clients: ${connectedClients.size}, Python server: ${pythonSocket ? 'Connected' : 'Disconnected'}`);
-}, 60000);
 
 io.on("connection", (socket) => {
   console.log(`✅ Client connected: ${socket.id}`);
@@ -89,7 +86,7 @@ io.on("connection", (socket) => {
   
   // Handle ICE candidate exchange
   socket.on("ice-candidate", (data) => {
-    console.log("📡 Forwarding ICE Candidate...");
+    // console.log("📡 Forwarding ICE Candidate...");
     if (socket.id === pythonSocket?.id) {
       // From Python to React
       socket.broadcast.emit("ice-candidate", data);
