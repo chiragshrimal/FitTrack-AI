@@ -1,6 +1,7 @@
 import React, { createContext, useMemo, useContext, useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
+const BASE_URL = 'http://localhost:5002';
 const SocketContext = createContext(null);
 
 export const useSocket = () => {
@@ -11,7 +12,7 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    const newSocket = io("http://localhost:5002", {
+    const newSocket = io(BASE_URL, {
       transports: ["websocket"], // Explicitly use WebSocket
       withCredentials: true, // Support CORS
       reconnectionAttempts: 5,
