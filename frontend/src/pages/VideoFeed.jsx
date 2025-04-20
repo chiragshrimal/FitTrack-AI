@@ -217,87 +217,151 @@ const VideoFeed = () => {
     };
   }, []);
 
-  const startRecording = async () => {
-    if (!webcamRef.current) {
-      console.error("Webcam reference is not available");
-      return;
-    }
-    
-    try {
-      console.log("Starting recording...");
+const startRecording = async () => {
+  if (!webcamRef.current) {
+    console.error("Webcam reference is not available");
+    return;
+  }
+  
+  try {
+    console.log("Starting recording...");
     setIsRecording(true);
     setConnectionError(null);
     setRemoteStreamInfo(null);
     setConnectionPhase("connecting");
-  
-      // Initialize PeerService
-      console.log("Initializing PeerService...");
-      PeerService.init();
-  
-      // Set up connection state monitoring first (before adding tracks)
-      setupConnectionMonitoring();
-  
-      // Get webcam stream
-      console.log("Requesting camera access...");
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 640, height: 480, frameRate: 30 }, 
-        audio: false
-      });
-      
-      console.log("Camera access granted, attaching to video element");
-      webcamRef.current.srcObject = stream;
-      
-      // Add tracks to peer connection
-      console.log("Adding tracks to peer connection");
-      stream.getTracks().forEach((track) => {
-        PeerService.peer.addTrack(track, stream);
-        console.log(`Added ${track.kind} track to peer connection`);
-      });
-  
-      // Create and send SDP Offer with exercise type
-      console.log("Creating SDP offer...");
-      const offer = await PeerService.getOffer();
-      console.log("Sending offer to server with exercise type:", currentExercise);
-      socket.emit("webrtc-offer", { 
-        sdp: offer.sdp, 
-        type: offer.type,
-        exerciseType: currentExercise 
-      });
-  
-      // Set a connection timeout
-      const connectionTimeout = setTimeout(() => {
-        if (PeerService.peer.connectionState !== "connected") {
-          console.error("Connection timeout reached");
-          setConnectionError("Connection timeout - please try again");
-          stopRecording();
-        }
-      }, 15000); // 15 second timeout
-  
-      // Clear timeout when connected successfully
-      const clearTimeoutOnConnect = () => {
-        if (PeerService.peer.connectionState === "connected") {
-          clearTimeout(connectionTimeout);
-          // Remove this listener once we're connected
-          PeerService.peer.removeEventListener("connectionstatechange", clearTimeoutOnConnect);
-        }
+
+    // Initialize PeerService
+    console.log("Initializing PeerService...");
+    PeerService.init();
+
+    // Set up connection state monitoring
+    setupConnectionMonitoring();
+
+    // Get webcam stream first
+    console.log("Requesting camera access...");
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { width: 640, height: 480, frameRate: 30 }, 
+      audio: false
+    });
+    
+    console.log("Camera access granted, attaching to video element");
+    webcamRef.current.srcObject = stream;
+
+    // Wait for the media stream to be truly ready by waiting for metadata
+    await new Promise(resolve => {
+      webcamRef.current.onloadedmetadata = () => {
+        console.log("Webcam metadata loaded, media stream ready");
+        resolve();
       };
-      PeerService.peer.addEventListener("connectionstatechange", clearTimeoutOnConnect);
-  
-      console.log("Recording started successfully");
-      if(startTime == null){
-        setStartTime(new Date());
+      // Fallback timeout in case onloadedmetadata doesn't fire
+      setTimeout(resolve, 1000);
+    });
+
+    // Add tracks to peer connection before creating offer
+    // This is important for proper SDP negotiation
+    console.log("Adding tracks to peer connection");
+    const senders = [];
+    stream.getTracks().forEach((track) => {
+      const sender = PeerService.peer.addTrack(track, stream);
+      senders.push(sender);
+      console.log(`Added ${track.kind} track to peer connection`);
+    });
+
+    // Create and send SDP Offer with exercise type
+    console.log("Creating SDP offer with tracks...");
+    const offer = await PeerService.getOffer();
+    console.log("Sending offer to server with exercise type:", currentExercise);
+    socket.emit("webrtc-offer", { 
+      sdp: offer.sdp, 
+      type: offer.type,
+      exerciseType: currentExercise 
+    });
+
+    // After offer is created, set up explicit signal for when ICE is completed
+    PeerService.peer.addEventListener("iceconnectionstatechange", () => {
+      if (PeerService.peer.iceConnectionState === "connected" || 
+          PeerService.peer.iceConnectionState === "completed") {
+        console.log("ICE connection established, notifying server media is ready");
+        socket.emit("media-ready", { exerciseType: currentExercise });
       }
-      setEndTime(null);
-      setSessionRepCount(0);
-    } catch (err) {
-      console.error("Error starting recording:", err);
-      setConnectionError(`Failed to access camera: ${err.message}`);
-      setIsRecording(false);
+    });
+
+    // Set a connection timeout
+    const connectionTimeout = setTimeout(() => {
+      if (PeerService.peer.connectionState !== "connected") {
+        console.error("Connection timeout reached");
+        setConnectionError("Connection timeout - please try again");
+        stopRecording();
+      }
+    }, 15000); // 15 second timeout
+
+    // Clear timeout when connected successfully
+    const clearTimeoutOnConnect = () => {
+      if (PeerService.peer.connectionState === "connected") {
+        clearTimeout(connectionTimeout);
+        
+        // When connection is established, verify tracks are active
+        senders.forEach(sender => {
+          if (sender.track && sender.track.kind === 'video') {
+            console.log("Video track status:", sender.track.readyState);
+            if (sender.track.readyState === 'live') {
+              console.log("Confirming video frames are flowing");
+              socket.emit("frames-flowing", { exerciseType: currentExercise });
+              
+              // Schedule a check to ensure frames continue flowing
+              setTimeout(() => {
+                if (isRecording && PeerService.peer.connectionState === "connected") {
+                  console.log("Confirming continued frame flow");
+                  socket.emit("frames-continue-flowing");
+                }
+              }, 3000);
+            }
+          }
+        });
+        
+        // Remove this listener once we're connected
+        PeerService.peer.removeEventListener("connectionstatechange", clearTimeoutOnConnect);
+      }
+    };
+    PeerService.peer.addEventListener("connectionstatechange", clearTimeoutOnConnect);
+
+    console.log("Recording setup completed successfully");
+    if(startTime == null){
+      setStartTime(new Date());
     }
-  };
+    setEndTime(null);
+    setSessionRepCount(0);
+  } catch (err) {
+    console.error("Error starting recording:", err);
+    setConnectionError(`Failed to access camera: ${err.message}`);
+    setIsRecording(false);
+  }
+};
   
   // Extract connection monitoring to a separate function
   const setupConnectionMonitoring = () => {
+
+    const checkVideoTrackActivity = async (track, stream) => {
+      // Create an ImageCapture instance from the track
+      try {
+        const imageCapture = new ImageCapture(track);
+        
+        // Try to grab a frame, if successful, we know frames are flowing
+        await imageCapture.grabFrame();
+        console.log("✅ Verified video track is producing frames");
+        setConnectionPhase("frames-flowing");
+        
+        // Signal to the backend that frames should be coming
+        socket.emit("frames-ready");
+        
+        return true;
+      } catch (err) {
+        console.warn("Video track not yet producing frames:", err);
+        return false;
+      }
+    };
+
+
     // Handle incoming video stream (processed by Python AI)
     PeerService.peer.ontrack = (event) => {
       console.log("📡 Received processed video track!", event.streams);
@@ -314,6 +378,8 @@ const VideoFeed = () => {
         }))
       };
       console.log("Stream info:", streamInfo);
+
+      
       
       if (remoteVideoRef.current && event.streams[0]) {
         console.log("Attaching remote stream to video element");
@@ -352,6 +418,26 @@ const VideoFeed = () => {
       } else {
         console.error("Remote video reference is not available or no streams");
       }
+
+      // For local tracks (before sending to peer):
+    const videoTrack = webcamRef.current?.srcObject?.getVideoTracks()?.[0];
+    if (videoTrack) {
+      let attempts = 0;
+      const maxAttempts = 5;
+      
+      const checkFrames = async () => {
+        attempts++;
+        const success = await checkVideoTrackActivity(videoTrack, webcamRef.current.srcObject);
+        
+        if (!success && attempts < maxAttempts) {
+          console.log(`Waiting for video frames, attempt ${attempts}/${maxAttempts}`);
+          setTimeout(checkFrames, 1000);
+        }
+      };
+      
+      checkFrames();
+    }
+
     };
   
     // Single ICE candidate handler with error handling
@@ -399,6 +485,11 @@ const VideoFeed = () => {
     PeerService.peer.onconnectionstatechange = () => {
       const state = PeerService.peer.connectionState;
       console.log("WebRTC connection state:", state);
+
+      if (PeerService.peer.connectionState === "connected") {
+        console.log("WebRTC connection established successfully!");
+        socket.emit("connection-established", { exerciseType: currentExercise });
+      }
       
       if (state === "failed" || state === "disconnected" || state === "closed") {
         console.error(`WebRTC connection ${state}`);
@@ -408,6 +499,19 @@ const VideoFeed = () => {
         console.log("WebRTC connection established successfully!");
       }
     };
+
+    // Add this to your setupConnectionMonitoring function
+    PeerService.peer.addEventListener("connectionstatechange", async () => {
+      if (PeerService.peer.connectionState === "connected") {
+        console.log("WebRTC connection fully established");
+        
+        // Allow a moment for media pipeline to initialize
+        setTimeout(() => {
+          socket.emit("connection-ready", { exerciseType: currentExercise });
+          console.log("Notified backend that connection is ready");
+        }, 1000);
+      }
+    });
   };
 
   const stopRecording = () => {
@@ -445,6 +549,38 @@ const VideoFeed = () => {
     setRepCount(prevTotal => prevTotal + sessionRepCount);
     console.log("Recording stopped");
   };
+
+  // Add this to your VideoFeed component
+  useEffect(() => {
+    if (isRecording) {
+      const frameMonitor = setInterval(() => {
+        if (webcamRef.current?.srcObject) {
+          const videoTrack = webcamRef.current.srcObject.getVideoTracks()[0];
+          if (videoTrack) {
+            console.log("Video track status:", {
+              enabled: videoTrack.enabled,
+              muted: videoTrack.muted,
+              readyState: videoTrack.readyState
+            });
+
+            videoTrack.onunmute = () => {
+              console.log("Video track is unmuted and ready to send");
+              socket.emit("frames-ready", { exerciseType: currentExercise });
+            };            
+            
+            if (videoTrack.readyState === "live" && !videoTrack.muted) {
+              socket.emit("frames-flowing");
+            }
+            
+
+            
+          }
+        }
+      }, 1000);
+      
+      return () => clearInterval(frameMonitor);
+    }
+  }, [isRecording, socket]);
 
   // Handle exercise change during active recording
   useEffect(() => {

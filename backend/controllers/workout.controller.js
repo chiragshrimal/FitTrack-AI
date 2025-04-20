@@ -109,7 +109,7 @@ export const fetchWorkoutByDay = asyncHandler(async (req, res, next) => {
     const { exercise, count, username } = req.query;
 
     // Validate input
-    if (!exercise || !username) {
+    if (!exercise) {
         return next(new AppError("Exercise name and username are required", 400));
     }
 

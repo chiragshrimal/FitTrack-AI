@@ -14,15 +14,10 @@ class PeerService {
           urls: [
             "stun:stun.l.google.com:19302",
             "stun:stun1.l.google.com:19302",
-            "stun:stun2.l.google.com:19302",
-            "stun:stun3.l.google.com:19302",
-            "stun:stun4.l.google.com:19302",
-            "stun:stun.ekiga.net",
-            "stun:global.stun.twilio.com:3478"
           ]
         }
       ],
-      iceCandidatePoolSize: 10 // Increases the pool of ICE candidates
+      iceCandidatePoolSize: 3 // Increases the pool of ICE candidates
     });
     
     console.log("PeerService initialized with new RTCPeerConnection");

@@ -127,7 +127,7 @@ class VideoProcessTrack(MediaStreamTrack):
         
         # Set timeout based on connection phase
         if self.connection_phase == "initializing":
-            timeout = 15.0  # Much longer timeout during initial connection
+            timeout = 25.0  # Much longer timeout during initial connection
         elif self.connection_phase == "connecting":
             timeout = 10.0  # Longer timeout while establishing connection
         else:
