@@ -84,6 +84,19 @@ class VideoProcessTrack(MediaStreamTrack):
         # Start a connection monitor task
         self.connection_monitor = asyncio.create_task(self._monitor_connection())
 
+    async def _monitor_frame_flow(self):
+        """Monitors if frames are flowing and attempts recovery if needed"""
+        while True:
+            await asyncio.sleep(3)
+            
+            # If connection is established but no frames received recently
+            current_time = asyncio.get_event_loop().time()
+            if self.connection_phase == "established" and current_time - getattr(self, 'last_frame_time', 0) > 5:
+                print("No frames received recently - attempting recovery")
+                # Emit an event to request frames again
+                if sio.connected:
+                    await sio.emit("request-frames")
+    
     async def _background_processor(self):
         """Background task that processes frames asynchronously."""
         while True:
@@ -125,136 +138,136 @@ class VideoProcessTrack(MediaStreamTrack):
         global last_feedback_time
         print("Attempting to receive frame")
         
-        # Set timeout based on connection phase
+        # Set shorter timeout and add retry logic
+        retry_count = 0
+        max_retries = 3
+        
+        # Set timeout based on connection phase, but make it shorter
         if self.connection_phase == "initializing":
-            timeout = 25.0  # Much longer timeout during initial connection
+            timeout = 10.0  # Shorter timeout during initial connection
         elif self.connection_phase == "connecting":
-            timeout = 10.0  # Longer timeout while establishing connection
+            timeout = 5.0  # Shorter timeout while establishing connection
         else:
-            timeout = 5.0   # Normal timeout once established
+            timeout = 3.0   # Shorter normal timeout once established
         
-        # Try to receive a frame with timeout
-        try:
-            frame = await asyncio.wait_for(self.track.recv(), timeout=5.0)
-            print("Frame received successfully")
-            self.frames_received += 1
-        except asyncio.TimeoutError:
-            print("Timeout waiting for frame")
-            # Create a blank frame as fallback
-            h, w = 480, 640  # Default dimensions
-            blank_img = np.zeros((h, w, 3), dtype=np.uint8)
-            
-            if self.connection_phase == "initializing":
-                message = "Establishing connection..."
-            elif self.connection_phase == "connecting":
-                message = "Waiting for video..."
-            else:
-                message = "Video timeout, reconnecting..."
-                
-            cv2.putText(blank_img, "Waiting for video...", (50, 240), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            
-            # Create a VideoFrame from the blank image
-            frame = VideoFrame.from_ndarray(blank_img, format="bgr24")
-            # Set timestamp if needed
-            frame.pts = getattr(self, 'last_pts', 0)
-            frame.time_base = getattr(self, 'last_time_base', fractions.Fraction(1, 30))
-        except Exception as e:
-            print(f"Error receiving frame: {e}")
-            # Similar fallback as timeout case
-            h, w = 480, 640
-            blank_img = np.zeros((h, w, 3), dtype=np.uint8)
-            cv2.putText(blank_img, f"Error: {str(e)[:20]}", (50, 240), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            
-            frame = VideoFrame.from_ndarray(blank_img, format="bgr24")
-            frame.pts = getattr(self, 'last_pts', 0)
-            frame.time_base = getattr(self, 'last_time_base', fractions.Fraction(1, 30))
-        
-        # Store frame timing info for potential future fallbacks
-        self.last_pts = frame.pts
-        self.last_time_base = frame.time_base
-        
-        # Convert frame to OpenCV format with error handling
-        try:
-            img = frame.to_ndarray(format="bgr24")
-        except Exception as e:
-            print(f"Error converting frame to numpy array: {e}")
-            img = np.zeros((480, 640, 3), dtype=np.uint8)
-        
-        # Increment frame counter
-        self.frame_count += 1
-        
-        # Process every Nth frame
-        process_this_frame = (self.frame_count % 5 == 0)
-        
-        # Get current time for feedback timing
-        current_time = asyncio.get_event_loop().time()
-        
-        # Process frame if needed
-        landmarks = None
-        processed_img = img.copy()  # Default to original image
-        
-        if process_this_frame:
+        while retry_count < max_retries:
             try:
-                processed_img, landmarks = self.processor.process_frame(img)
+                frame = await asyncio.wait_for(self.track.recv(), timeout=timeout)
+                print("Frame received successfully")
+                self.frames_received += 1
                 
-                # Add landmarks to processing queue if available
-                if landmarks and not self.processing_queue.full():
+                # Store frame timing info for potential future fallbacks
+                self.last_pts = frame.pts
+                self.last_time_base = frame.time_base
+                
+                # Convert frame to OpenCV format with error handling
+                try:
+                    img = frame.to_ndarray(format="bgr24")
+                except Exception as e:
+                    print(f"Error converting frame to numpy array: {e}")
+                    img = np.zeros((480, 640, 3), dtype=np.uint8)
+                
+                # Increment frame counter
+                self.frame_count += 1
+                
+                # Process every Nth frame
+                process_this_frame = (self.frame_count % 5 == 0)
+                
+                # Get current time for feedback timing
+                current_time = asyncio.get_event_loop().time()
+                
+                # Process frame if needed
+                landmarks = None
+                processed_img = img.copy()  # Default to original image
+                
+                if process_this_frame:
                     try:
-                        self.processing_queue.put_nowait(landmarks)
-                    except asyncio.QueueFull:
-                        pass  # Skip if queue is full
-                
-            except Exception as e:
-                print(f"Error processing frame: {e}")
-                # Continue with unprocessed image if processing fails
-        
-        # Get latest analysis results with lock
-        try:
-            async with self.analysis_lock:
-                analysis = dict(self.last_analysis)
-        except Exception as e:
-            print(f"Error getting analysis: {e}")
-            analysis = {
-                'repCount': 0, 
-                'form': 'Error', 
-                'accuracy': 0, 
-                'position': 'unknown'
-            }
-        
-        # Draw feedback on frame (with try/except for safety)
-        try:
-            cv2.putText(processed_img, f"Reps: {analysis['repCount']}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.putText(processed_img, f"Form: {analysis['form']}", (10, 70),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            cv2.putText(processed_img, f"Accuracy: {analysis.get('accuracy', 0):.1f}%", (10, 110),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                        processed_img, landmarks = self.processor.process_frame(img)
                         
-            position_str = analysis.get('position', 'unknown')
-            cv2.putText(processed_img, f"Position: {position_str}", (10, 150),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
-        except Exception as e:
-            print(f"Error drawing text on frame: {e}")
-        
-        # Send feedback at a lower frequency
-        if current_time - last_feedback_time > 0.5:
-            last_feedback_time = current_time
-            asyncio.create_task(send_feedback(analysis))
-        
-        # Convert back to WebRTC-compatible frame
-        try:
-            new_frame = VideoFrame.from_ndarray(processed_img, format="bgr24")
-            new_frame.pts = frame.pts
-            new_frame.time_base = frame.time_base
-        except Exception as e:
-            print(f"Error creating output frame: {e}")
-            # Return original frame if conversion fails
-            return frame
-        
-        print("Frame processed successfully")
-        return new_frame
+                        # Add landmarks to processing queue if available
+                        if landmarks and not self.processing_queue.full():
+                            try:
+                                self.processing_queue.put_nowait(landmarks)
+                            except asyncio.QueueFull:
+                                pass  # Skip if queue is full
+                        
+                    except Exception as e:
+                        print(f"Error processing frame: {e}")
+                        # Continue with unprocessed image if processing fails
+                
+                # Get latest analysis results with lock
+                try:
+                    async with self.analysis_lock:
+                        analysis = dict(self.last_analysis)
+                except Exception as e:
+                    print(f"Error getting analysis: {e}")
+                    analysis = {
+                        'repCount': 0, 
+                        'form': 'Error', 
+                        'accuracy': 0, 
+                        'position': 'unknown'
+                    }
+                
+                # Draw feedback on frame (with try/except for safety)
+                try:
+                    cv2.putText(processed_img, f"Reps: {analysis['repCount']}", (10, 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    cv2.putText(processed_img, f"Form: {analysis['form']}", (10, 70),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    cv2.putText(processed_img, f"Accuracy: {analysis.get('accuracy', 0):.1f}%", (10, 110),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                                
+                    position_str = analysis.get('position', 'unknown')
+                    cv2.putText(processed_img, f"Position: {position_str}", (10, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+                except Exception as e:
+                    print(f"Error drawing text on frame: {e}")
+                
+                # Send feedback at a lower frequency
+                if current_time - last_feedback_time > 0.5:
+                    last_feedback_time = current_time
+                    asyncio.create_task(send_feedback(analysis))
+                
+                # Convert back to WebRTC-compatible frame
+                try:
+                    new_frame = VideoFrame.from_ndarray(processed_img, format="bgr24")
+                    new_frame.pts = frame.pts
+                    new_frame.time_base = frame.time_base
+                except Exception as e:
+                    print(f"Error creating output frame: {e}")
+                    # Return original frame if conversion fails
+                    return frame
+                
+                print("Frame processed successfully")
+                return new_frame
+                
+            except asyncio.TimeoutError:
+                retry_count += 1
+                print(f"Timeout waiting for frame (attempt {retry_count}/{max_retries})")
+                if retry_count >= max_retries:
+                    # Create a blank frame as fallback after all retries
+                    h, w = 480, 640  # Default dimensions
+                    blank_img = np.zeros((h, w, 3), dtype=np.uint8)
+                    
+                    if self.connection_phase == "initializing":
+                        message = "Establishing connection..."
+                    elif self.connection_phase == "connecting":
+                        message = "Waiting for video..."
+                    else:
+                        message = "Video timeout, reconnecting..."
+                        
+                    cv2.putText(blank_img, message, (50, 240), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    
+                    # Create a VideoFrame from the blank image
+                    frame = VideoFrame.from_ndarray(blank_img, format="bgr24")
+                    # Set timestamp if needed
+                    frame.pts = getattr(self, 'last_pts', 0)
+                    frame.time_base = getattr(self, 'last_time_base', fractions.Fraction(1, 30))
+                    return frame
+                
+                # Short delay before retry
+                await asyncio.sleep(0.1)
 
 async def send_feedback(analysis):
     """Send exercise feedback to Node.js server"""
@@ -303,10 +316,14 @@ async def on_offer(data):
     @pc.on("track")
     def on_track(track):
         if track.kind == "video":
-            print("received video tarck")
+            print("received video track")
             # Create video processing track with the specified exercise type
             processed_track = VideoProcessTrack(track, exercise_type)
             pc.addTrack(processed_track)
+            # Store reference to track for easier access
+            pc._videoProcessTrack = processed_track
+            # Start the frame flow monitor
+            asyncio.create_task(processed_track._monitor_frame_flow())
     
     # Set up data channel for additional communication
     @pc.on("datachannel")
@@ -383,6 +400,29 @@ async def on_ice_candidate(data):
             await pc.addIceCandidate(candidate)
         except Exception as e:
             print(f"Error adding ICE candidate: {e}")
+            
+@sio.on("frames-ready")
+async def on_frames_ready(data):
+    """Handle notification that frames are ready to flow"""
+    print("Client reports frames are ready to flow")
+    global pc
+    # Reset any frame timeouts or counters that might be causing delays
+    if pc and hasattr(pc, "_videoProcessTrack") and pc._videoProcessTrack:
+        pc._videoProcessTrack.frames_received = 0
+        pc._videoProcessTrack.connection_phase = "ready"
+        print("Reset frame reception counters")
+
+@sio.on("connection-ready") 
+async def on_connection_ready(data):
+    """Handle notification that WebRTC connection is fully established"""
+    print("Client reports WebRTC connection is fully established")
+    # Any initialization needed for a smooth start
+    global pc
+    if pc and hasattr(pc, "_videoProcessTrack") and pc._videoProcessTrack:
+        pc._videoProcessTrack.connection_phase = "established"
+        print("Set connection phase to established")            
+            
+            
 async def connect_to_server():
     """Connects to the WebSocket signaling server."""
     try:
@@ -395,6 +435,8 @@ async def connect_to_server():
         return True
     except socketio.exceptions.ConnectionError as e:
         return False
+
+
 
 async def main():
     """Main function to initiate WebSocket connection and keep it alive."""

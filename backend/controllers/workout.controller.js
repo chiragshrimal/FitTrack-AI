@@ -24,9 +24,7 @@ export const postWorkoutRecord = asyncHandler(async (req, res, next) => {
       }
 
       try{
-
         const userObjectId = new mongoose.Types.ObjectId(userId);
-
         const user = await User.findOne({ _id: userObjectId });
 
         // Convert startTime and stopTime to Date objects and calculate duration
@@ -50,34 +48,34 @@ export const postWorkoutRecord = asyncHandler(async (req, res, next) => {
         
           // Return the course created
           res.status(201).json({ record: createRecord });
- 
-
       } catch(err){
         return next(new AppError(err.message, 500));
       }
 });
 
-
-// TODO
 export const fetchWorkoutByRecord = asyncHandler(async (req, res, next) => {
     const { exercise, count, username } = req.query;
+    // console.log("received");
+    // console.log(count);
+    // console.log(username);
+    // console.log(exercise);
 
     // Validate input
-    if (!exercise) {
+    if (!exercise || !username) {
         return next(new AppError("Exercise name is required", 400));
     }
 
     try {
-
         const trainee = await User.findOne({ username: username });
 
         if (!trainee) {
+            // console.log("not found");
             return next(new AppError("User not found", 404));
         }
 
         const records = await PushUp.find({ name: exercise, user: trainee._id })
             .sort({ date: -1 }) 
-            .limit(count);
+            .limit(parseInt(count) || 30);
 
         if (!records || records.length === 0) {
             return next(new AppError("No records found for this exercise", 404));
@@ -98,89 +96,135 @@ export const fetchWorkoutByRecord = asyncHandler(async (req, res, next) => {
         }));
 
         res.status(200).json({ records: formattedRecords });
-
     } catch (err) {
         return next(new AppError(err.message, 500));
     }
 });
 
-
 export const fetchWorkoutByDay = asyncHandler(async (req, res, next) => {
-    const { exercise, count, username } = req.query;
+    const { exercise, count, username, fillEmptyDays } = req.query;
 
     // Validate input
-    // if (!exercise || !username) {
-    if (!exercise) {
+    if (!exercise || !username) {
         return next(new AppError("Exercise name and username are required", 400));
     }
 
-    const daysCount = parseInt(count) || 7; // Default to last 7 days if count is not provided
+    const daysCount = parseInt(count) || 7; // Default to 7 if not provided
+    const shouldFillEmptyDays = fillEmptyDays === 'true'; // Parse query parameter
 
     try {
-        // Find the trainee by username
+        // Find the user
         const trainee = await User.findOne({ username }).exec();
-
         if (!trainee) {
             return next(new AppError("User not found", 404));
         }
 
-        const today = new Date();
-        today.setHours(23, 59, 59, 999); // Set to end of today
+        // Calculate date range for last N days
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysCount);
 
-        const pastDate = new Date();
-        pastDate.setDate(today.getDate() - daysCount);
-        pastDate.setHours(0, 0, 0, 0); // Set to start of pastDate
-
-        // Aggregate workout records for the user
+        // Aggregate workout records for the user within date range
         const records = await PushUp.aggregate([
             {
-                $match: { 
-                    name: exercise, 
-                    user: new mongoose.Types.ObjectId(trainee._id), 
-                    date: { $gte: pastDate, $lte: today } // Filter records from the last 'count' days
+                $match: {
+                    name: exercise,
+                    user: new mongoose.Types.ObjectId(trainee._id),
+                    date: {
+                        $gte: startDate,
+                        $lte: endDate
+                    }
                 }
             },
             {
                 $group: {
-                    _id: { 
-                        $dateToString: { format: "%Y-%m-%d", date: "$date" } // Group by date (YYYY-MM-DD)
+                    _id: {
+                        $dateToString: { format: "%Y-%m-%d", date: "$date" }
                     },
-                    totalDuration: { $sum: "$duration" }, // Sum of duration
-                    totalCount: { $sum: "$count" }, // Sum of count
-                    recordCount: { $sum: 1 } // Total records on that date
+                    // Store a reference date for this group (first occurrence)
+                    createdAt: { $first: "$date" },
+                    totalDuration: { $sum: "$duration" },
+                    totalCount: { $sum: "$count" },
+                    recordCount: { $sum: 1 }
                 }
             },
             {
-                $sort: { _id: -1 } // Sort by latest date first
+                $sort: { _id: 1 } // Sort by date ascending
             },
             {
-                $limit: daysCount // Return only the last 'count' days
+                $project: {
+                    _id: 1,
+                    createdAt: 1,
+                    totalDuration: 1,
+                    totalCount: 1,
+                    recordCount: 1,
+                    date: {
+                        $dateToString: {
+                            format: "%B %d, %Y",
+                            date: "$createdAt",
+                            timezone: "Asia/Kolkata"
+                        }
+                    }
+                }
             }
         ]).exec();
-
+        
+        // If no records found
         if (!records || records.length === 0) {
-            return next(new AppError("No records found for this exercise", 404));
+            return next(new AppError("No records found for this exercise in the last " + daysCount + " days", 404));
         }
 
-        // Convert `_id` (date) to IST format before returning
-        const formattedRecords = records.map(record => ({
-            date: new Date(record._id).toLocaleString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "long",
-                day: "numeric"
-            }),
-            totalDuration: record.totalDuration,
-            totalCount: record.totalCount,
-            recordCount: record.recordCount
-        }));
-
-        res.status(200).json({ records: formattedRecords });
-
+        // Only fill missing days if explicitly requested
+        const responseRecords = shouldFillEmptyDays ? 
+            fillMissingDays(records, startDate, endDate) : 
+            records;
+        
+        res.status(200).json({ records: responseRecords });
     } catch (err) {
         return next(new AppError(err.message, 500));
     }
 });
 
-
-
+// Helper function to fill in missing days in the date range with zero values
+function fillMissingDays(records, startDate, endDate) {
+    const recordsMap = {};
+    
+    // Create a map of existing records by date string
+    records.forEach(record => {
+        recordsMap[record._id] = record;
+    });
+    
+    const filledRecords = [];
+    const currentDate = new Date(startDate);
+    
+    // Loop through each day in the range
+    while (currentDate <= endDate) {
+        // Format date consistent with the _id format from MongoDB aggregation
+        const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        
+        if (recordsMap[dateString]) {
+            // Use existing record if available
+            filledRecords.push(recordsMap[dateString]);
+        } else {
+            // Create a placeholder record with zeros
+            filledRecords.push({
+                _id: dateString,
+                createdAt: new Date(currentDate),
+                totalDuration: 0,
+                totalCount: 0,
+                recordCount: 0,
+                date: currentDate.toLocaleDateString('en-IN', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    timeZone: 'Asia/Kolkata'
+                })
+            });
+        }
+        
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return filledRecords;
+}

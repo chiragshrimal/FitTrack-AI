@@ -41,7 +41,7 @@ const Dashboard = () => {
   // Fetch activity data based on user type and selections
   useEffect(() => {
     if (auth?.user?.userType === "trainee") {
-      fetchTraineeActivityData(null, selectedActivity, selectedDays, fetchType);
+      fetchTraineeActivityData(auth.user.username, selectedActivity, selectedDays, fetchType);
     } else if (auth?.user?.userType === "trainer" && selectedTrainee) {
       fetchTrainerActivityData(
         selectedTrainee,
@@ -90,22 +90,54 @@ const Dashboard = () => {
             username: traineeUsername,
             exercise: activity,
             count: days,
+            fillEmptyDays: false
           },
         }
       );
 
       if (response.data && response.data.records) {
+        console.log(response);
         const records = response.data.records;
         setActivityData(records);
 
         // Transform data for charts
         const formattedData = records
-          .map((record) => ({
-            day: new Date(record.createdAt).toLocaleDateString(),
-            reps: record.count,
-            duration: parseFloat(record.duration.toFixed(2)),
-          }))
+          .map((record) => {
+            let dateObj;
+            
+            // Handle different date formats from different endpoints
+            if (record.date) {
+              // Handle string dates with "at" in them
+              dateObj = new Date(record.date.replace ? record.date.replace("at", "") : record.date);
+            } else if (record.createdAt) {
+              // Handle ISO dates
+              dateObj = new Date(record.createdAt);
+            } else if (record._id) {
+              // Handle grouped data with _id as date string
+              dateObj = new Date(record._id);
+            } else {
+              // Fallback
+              console.warn("Could not parse date from record:", record);
+              dateObj = new Date();
+            }
+            
+            // Check if date is valid
+            if (isNaN(dateObj.getTime())) {
+              console.warn("Invalid date created:", dateObj, "from record:", record);
+              dateObj = new Date(); // Fallback to current date if invalid
+            }
+            
+            return {
+              day: dateObj.toLocaleDateString(),
+              reps: fetchType === "record" ? record.count : record.totalCount || 0,
+              duration: fetchType === "record"
+                ? parseFloat((record.duration || 0).toFixed(2))
+                : parseFloat((record.totalDuration || 0).toFixed(2)),
+            };
+          })
           .reverse(); // Reverse to show oldest to newest
+          
+        console.log("Chart data:", formattedData);
         setChartData(formattedData);
       }
     } catch (error) {
@@ -139,23 +171,46 @@ const Dashboard = () => {
       if (response.data && response.data.records) {
         const records = response.data.records;
         setActivityData(records);
-        console.log(records);
+        console.log("Received records:", records);
         
-        // Transform data for charts
+        // Transform data for charts with more robust date handling
         const formattedData = records
-          .map((record) => ({
-            day: new Date(
-              record.date?.replace("at", "") || record.createdAt
-            ).toLocaleDateString("en-GB"),
-            reps:
-              fetchType === "record" ? record.count : record.totalCount || 0,
-            duration:
-              fetchType === "record"
+          .map((record) => {
+            let dateObj;
+            
+            // Handle different date formats from different endpoints
+            if (record.date) {
+              // Handle string dates
+              dateObj = new Date(record.date.replace ? record.date.replace("at", "") : record.date);
+            } else if (record.createdAt) {
+              // Handle ISO dates 
+              dateObj = new Date(record.createdAt);
+            } else if (record._id) {
+              // Handle grouped data with _id as date string
+              dateObj = new Date(record._id);
+            } else {
+              // Fallback
+              console.warn("Could not parse date from record:", record);
+              dateObj = new Date();
+            }
+            
+            // Check if date is valid
+            if (isNaN(dateObj.getTime())) {
+              console.warn("Invalid date created:", dateObj, "from record:", record);
+              dateObj = new Date(); // Fallback to current date if invalid
+            }
+            
+            return {
+              day: dateObj.toLocaleDateString(),
+              reps: fetchType === "record" ? record.count : record.totalCount || 0,
+              duration: fetchType === "record"
                 ? parseFloat((record.duration || 0).toFixed(2))
                 : parseFloat((record.totalDuration || 0).toFixed(2)),
-          }))
+            };
+          })
           .reverse(); // Reverse to show oldest to newest
-
+          
+        console.log("Chart data:", formattedData);
         setChartData(formattedData);
       }
     } catch (error) {
@@ -186,10 +241,15 @@ const Dashboard = () => {
     }
 
     const totalRecords = activityData.length;
-    const totalReps =
-      fetchType === "record"
-        ? activityData.reduce((sum, record) => sum + (record.count || 0), 0)
-        : activityData.reduce((sum, record) => sum + (record.totalCount || 0),0)
+    let totalReps = 0;
+    
+    // Handle different data structures based on fetch type
+    if (fetchType === "record") {
+      totalReps = activityData.reduce((sum, record) => sum + (record.count || 0), 0);
+    } else {
+      totalReps = activityData.reduce((sum, record) => sum + (record.totalCount || 0), 0);
+    }
+    
     const avgReps = totalReps / totalRecords;
 
     return {
@@ -375,17 +435,15 @@ const Dashboard = () => {
                             className="activity-item"
                           >
                             <h3>{activity.name || selectedActivity}</h3>
-                            <p>Reps: {fetchType==="record" ? activity?.count : activity?.totalCount || 0}</p>
+                            <p>Reps: {fetchType === "record" ? activity?.count : activity?.totalCount || 0}</p>
                             <p>
-                              Duration: {(fetchType==="record" ? activity.duration : activity.totalDuration || 0).toFixed(2)}{" "}
+                              Duration: {parseFloat(fetchType === "record" ? activity.duration : activity.totalDuration || 0).toFixed(2)}{" "}
                               min
                             </p>
                             <p>
                               Date:{" "}
                               {activity.date ||
-                                new Date(
-                                  activity.createdAt
-                                ).toLocaleDateString()}
+                                (activity.createdAt ? new Date(activity.createdAt).toLocaleDateString() : "N/A")}
                             </p>
                           </div>
                         ))}

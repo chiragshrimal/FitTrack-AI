@@ -140,6 +140,21 @@ const VideoFeed = () => {
       debugSocket();
     });
 
+    // Handle frame refresh requests from Python
+    socket.on("refresh-frames", () => {
+      console.log("Received request to refresh frames");
+      
+      // If we're recording, try to refresh the video track
+      if (isRecording && webcamRef.current?.srcObject) {
+        const videoTrack = webcamRef.current.srcObject.getVideoTracks()[0];
+        if (videoTrack) {
+          // Signal that frames should be flowing
+          socket.emit("frames-flowing", { exerciseType: currentExercise });
+          console.log("Signaled that frames should be flowing");
+        }
+      }
+    });
+
     // Receive answer and set you local description else log error
     socket.on("webrtc-answer", async (answer) => {
       console.log("Received SDP answer from server");
@@ -202,6 +217,7 @@ const VideoFeed = () => {
       socket.off("ice-candidate");
       socket.off("exercise-feedback");
       socket.off("python-disconnected");
+      socket.off("refresh-frames");
     };
   }, [socket]);
 
@@ -265,6 +281,15 @@ const startRecording = async () => {
       const sender = PeerService.peer.addTrack(track, stream);
       senders.push(sender);
       console.log(`Added ${track.kind} track to peer connection`);
+
+       // Add this code to explicitly monitor track readiness
+    if (track.kind === 'video') {
+      track.onunmute = () => {
+        console.log("Video track is unmuted and ready to send");
+        socket.emit("frames-ready", { exerciseType: currentExercise });
+      };
+    }
+    
     });
 
     // Create and send SDP Offer with exercise type

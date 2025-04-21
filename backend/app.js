@@ -98,6 +98,28 @@ io.on("connection", (socket) => {
       socket.emit("python-disconnected");
     }
   });
+
+  // Handle frames-ready event from React
+  socket.on("frames-ready", (data) => {
+    console.log("📊 Client reports frames are ready to flow");
+    if (pythonSocket) {
+      pythonSocket.emit("frames-ready", data);
+    }
+  });
+
+  // Handle connection-ready event from React
+  socket.on("connection-ready", (data) => {
+    console.log("📊 Client reports WebRTC connection is ready");
+    if (pythonSocket) {
+      pythonSocket.emit("connection-ready", data);
+    }
+  });
+
+  // Handle request-frames event from Python
+  socket.on("request-frames", () => {
+    console.log("🔄 Python requests frames refresh");
+    socket.broadcast.emit("refresh-frames");
+  });
   
   // Handle exercise type changes
   socket.on("exercise-change", (data) => {
